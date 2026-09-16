@@ -1,0 +1,35 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "default-config",
+      "binaryDir": "${sourceDir}/build"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default-build",
+      "configurePreset": "default-config"
+    },
+    {
+      "name": "build-run",
+      "configurePreset": "default-config",
+      "targets": ["run"]
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "configure-build-run",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "default-config"
+        },
+        {
+          "type": "build",
+          "name": "build-run"
+        }
+      ]
+    }
+  ]
+}

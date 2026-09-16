@@ -1,0 +1,203 @@
+Trabalho Final de Computação Gráfica e Visualização I
+O objetivo deste trabalho é consolidar seu conhecimento sobre a representação e visualização de objetos bidimensionais (2D) e tridimensionais (3D) através do desenvolvimento de uma Aplicação Gráfica (programa de computador). Você irá exercitar os conceitos básicos de Computação Gráfica, como visualização em ambientes tridimensionais, interação, detecção de colisão, e utilização de texturas, entre outros. Opcionalmente, você pode integrar conceitos de Visualização no seu trabalho.
+
+Resumo dos prazos
+Prazo	O quê
+21 de setembro de 2026	Preenchimento do Google Forms em https://forms.gle/oWV6qgL7yTykq8xN8
+21 de setembro de 2026	Preenchimento do arquivo SPEC.md no repositório GitHub
+4 e 11 de novembro de 2026	Avaliação parcial dos trabalhos finais, em laboratório
+7 e 9 de dezembro de 2026	Apresentação dos trabalhos finais, para toda a turma
+11 de dezembro de 2026 (sexta-feira)	Entrega final do trabalho completo
+Especificação
+Você deve desenvolver uma Aplicação Gráfica de sua escolha que preencha todos os requisitos descritos na lista abaixo. A nota final do trabalho será calculada com base nestes requisitos, portanto é importante que você se esforce para atingi-los.
+
+Exemplos de Aplicações Gráficas desenvolvidas por alunos em semestres anteriores podem ser vistos na seguinte playlist do YouTube:
+
+Playlist - Trabalhos de Computação Gráfica - INF/UFRGS
+Requisitos
+O trabalho deve ser desenvolvido em duplas.
+Parte da entrega do trabalho final de CGVis será através do Git (hosting no GitHub). Assim, o professor poderá colaborar através de revisão de código (dado um commit específico), pull requests, etc., caso a dupla precise de alguma ajuda durante o desenvolvimento do trabalho.
+Até o dia 21 de setembro de 2026, preencha o formulário do link abaixo informando os integrantes de sua dupla e uma breve descrição de qual será a aplicação gráfica desenvolvida, além de outras informações sobre a entrega do trabalho final. O formulário deve ser preenchido por somente um dos integrantes da dupla.
+Link para o formulário que deve ser preenchido: https://forms.gle/oWV6qgL7yTykq8xN8
+Duplas que não seguirem à risca a instrução acima poderão sofrer desconto de nota.
+A primeira parte obrigatória do trabalho será criar um arquivo de especificação, chamado SPEC.md, no seu repositório Git.
+Você deve seguir o template existente no seguinte repositório: https://github.com/cgvis-inf-ufrgs/cgvis-base-trabalho-final
+O repositório no GitHub deve conter imagens de referência visual do que será implementado, e essas imagens devem estar vinculadas no arquivo SPEC.md. Consulte o repositório template do código base do trabalho para mais detalhes.
+A primeira versão completa deste arquivo deve estar preenchida Até o dia 21 de setembro de 2026, para revisão do professor.
+Após a revisão do professor e a realização das correções solicitadas, o arquivo SPEC.md não poderá mais ser alterado. Isto é, você precisará implementar exatamente o que foi especificado.
+REGRAS MUITO IMPORTANTES:
+Você pode utilizar a linguagem de programação de sua escolha.
+O código deve utilizar obrigatoriamente somente APIs gráficas de baixo nível (OpenGL, Direct3D, Metal, WebGPU ou Vulkan). Não podem ser utilizados motores gráficos (graphic engines) de mais alto nível, incluindo mas não limitado a: Unity, Unreal, Godot, raylib, pygame, Ogre, Three.js, Bevy, entre outros.
+Recomenda-se o uso da linguagem C++ com OpenGL. Isto possibilitará a reutilização de código desenvolvido em nossas aulas práticas (laboratórios). Também, facilitará na criação de uma aplicação de alta performance, com interação em tempo real.
+Você pode utilizar livremente ferramentas de IA para geração de código neste trabalho.
+Entretanto, você obrigatoriamente precisa separar no histórico do Git os commits gerados por IA de commits com código gerado/editado por você. Todo commit com código gerado por IA deve ter a mensagem do commit iniciada por "IA: ..." (se você não sabe como fazer isso, pergunte para sua IA).
+Também, você obrigatoriamente deve incluir no repositório o prompt utilizado para gerar o código. Isso pode ser feito em um arquivo PROMPTS.md, onde o prompt é colocado e comitado junto com o código que foi gerado, ou o prompt pode ser colocado diretamente na mensagem do commit, com um identificador "PROMPT:" em maiúsculo, para fácil localização pelo professor.
+Além de IA, se você copiar algum trecho de código de algum lugar, precisa respeitar a licença de uso do código e precisa identificar o código com um comentário.
+Todo código pronto utilizado deve estar devidamente identificado através de comentários no código fonte entregue, listando a FONTE de onde foi retirado cada trecho de código. O comentário do código deve obrigatoriamente conter a palavra "FONTE" em maiúsculo, para fácil localização pelo professor.
+Quanto às imagens e aos demais assets utilizados no trabalho, como modelos 3D, texturas, fontes e arquivos de áudio, somente poderão ser adicionados ao repositório público no GitHub aqueles para os quais a dupla possua permissão de uso e redistribuição, de acordo com a respectiva licença.
+Se a aplicação depender de algum arquivo extra que não possa ser incluído no GitHub por qualquer motivo, o README.md deverá identificar explicitamente esse arquivo e explicar como obtê-lo, por exemplo, através do Moodle, da fonte original ou de um link para uma pasta no Google Drive. A forma de disponibilização indicada também deverá respeitar a licença do arquivo.
+Qualquer utilização de código pronto ou de IA que não respeitar estas regras será considerado plágio e o trabalho correspondente receberá nota zero.
+Qualquer cópia de código de trabalhos de colegas deste ou de semestres anteriores será considerado plágio e o trabalho correspondente receberá nota zero.
+O histórico do Git deve demonstrar um avanço incremental da implementação. Não é aceitável um histórico que seja um commit único que inclui 100% do código já na sua versão final.
+Ambos os integrantes da dupla devem possuir commits listados no histórico do Git. Caso o trabalho seja desenvolvido com "pair programming," os integrantes da dupla devem se revezar em quem estará escrevendo o código e criando os commits.
+A sua aplicação deve possibilitar interação em tempo real.
+Por exemplo, se você desenvolver um jogo, ele não pode ser "lento" a ponto de impactar negativamente a jogabilidade.
+A sua aplicação deve possuir algum objetivo e lógica de controle não-trivial.
+Por exemplo, um jogo de computador possui uma lógica não-trivial. Mas, uma aplicação que simplesmente carrega um modelo geométrico 3D e permite sua visualização é trivial.
+A sua aplicação deve utilizar as matrizes que vimos em aula para transformações geométricas (Model matrix), projeções (Projection matrix), e especificação do sistema de coordenadas da câmera (View matrix).
+Você não pode utilizar bibliotecas existentes para o cálculo de câmera, transformações, etc. Por exemplo, as funções a seguir, comumente utilizadas em tutoriais disponíveis na Web, não podem ser utilizadas:
+gluLookAt(), gluOrtho2D(), gluPerspective(), gluPickMatrix(), gluProject(), gluUnProject(), glm::lookAt(), glm::ortho(), glm::perspective(), glm::pickMatrix(), glm::rotate(), glm::scale(), glm::translate(), dentre outras.
+A sua aplicação deve possibilitar interação com o usuário através do mouse e do teclado.
+A sua aplicação deve incluir implementação dos seguintes conceitos de Computação Gráfica:
+
+Objetos virtuais representados através de malhas poligonais complexas (malhas de triângulos).
+Quanto maior a variedade de modelos geométricos, melhor. Veja a seção "Modelos 3D e Texturas Disponíveis na Web" na página principal de nosso Moodle para uma lista de locais onde você pode obter modelos 3D.
+Transformações geométricas de objetos virtuais.
+Através da interação com o teclado e/ou mouse, o usuário deve poder controlar transformações geométricas aplicadas aos objetos virtuais (não somente controle da câmera).
+Controle de câmeras virtuais.
+No mínimo sua aplicação deve implementar dois tipos de câmera consideravelmente distintos. Por exemplo, uma câmera look-at e uma câmera livre.
+No mínimo um objeto virtual deve ser copiado com duas ou mais instâncias, isto é, utilizando duas ou mais Model matrix aplicadas ao mesmo conjunto de vértices.
+Testes de intersecção entre objetos virtuais.
+Estes testes devem ter algum propósito dentro da lógica de sua aplicação.
+Por exemplo, em um jogo de corrida, o modelo virtual de um carro não pode atravessar a parede, e para tanto é necessário testar a intersecção entre estes dois objetos de modo a evitar esta intersecção.
+Os testes de colisão devem ser implementados em um arquivo separado, nomeado collisions.cpp para projetos em C++. Para outras linguagens de programação, utilize a extensão correspondente.
+Modelos de iluminação de objetos geométricos.
+Todos objetos devem possuir algum tipo de iluminação não-trivial.
+Mapeamento de texturas.
+Todos objetos virtuais de sua aplicação devem ter suas cores definidas através de texturas representadas por imagens (no mínimo três imagens distintas), ou por texturas procedurais.
+Imagens de texturas "esticadas" de maneira não natural receberão desconto de pontuação.
+Curvas de Bézier.
+No mínimo um objeto virtual de sua aplicação deve ter sua movimentação definida através de uma curva de Bézier cúbica. O objeto deve se movimentar de forma suave ao longo do espaço em um caminho curvo (não reto).
+Animação de Movimento baseada no tempo.
+Todas as movimentações de objetos (incluindo da câmera) devem ser computadas baseado no tempo (isto é, movimentações devem ocorrer sempre na mesma velocidade independente da velocidade da CPU onde o programa está sendo executado).
+Funcionalidades Extras
+A dupla deve implementar no mínimo uma funcionalidade extra relacionada ao conteúdo da disciplina em sua aplicação. A funcionalidade pode ser escolhida entre as sugestões abaixo ou pode ser outra proposta pela dupla.
+A funcionalidade extra escolhida deve ser descrita no arquivo SPEC.md e documentada no relatório final (README.md).
+Sugestões de funcionalidades extras de Computação Gráfica e Interação:
+
+Rasterização de curvas poligonais utilizando curvas de Bézier;
+Rasterização de superfícies suaves utilizando patches de Bézier;
+Sistema de partículas;
+Sombras;
+Billboards / Sprites;
+Interface Gráfica (botões, etc.);
+Sugestão de biblioteca https://github.com/ocornut/imgui;
+Rasterização de texto com fontes diversas;
+Sugestão de biblioteca https://github.com/rougier/freetype-gl;
+Seleção de objetos virtuais com o mouse (picking). Exemplo de implementação: Picking with custom Ray-OBB function;
+<sua ideia aqui>...
+Outras funcionalidades extras interessantes
+As funcionalidades abaixo podem enriquecer a aplicação, mas não contam como a funcionalidade extra obrigatória, pois não estão diretamente relacionadas à Computação Gráfica:
+
+Efeitos sonoros
+Sugestão de biblioteca: https://github.com/mackron/miniaudio.
+Apresentação Parcial
+Nas aulas de laboratório dos dias 4 e 11 de novembro de 2026, o professor irá passar por cada dupla no laboratório para que a dupla apresente uma versão em desenvolvimento do trabalho final, já compilando e executando, que já implemente alguns dos requisitos listados acima.
+
+Apresentação Final
+Cada dupla irá apresentar seu trabalho para a turma nas aulas dos dias 7 e 9 de dezembro de 2026. O tempo de apresentação é de no máximo 10 minutos por dupla. A ordem de apresentações se dará por sorteio nestes mesmos dias. A apresentação obrigatoriamente deve conter a demonstração da aplicação funcionando, e opcionalmente pode incluir uma apresentação de slides. Para isso a dupla pode utilizar o computador principal do laboratório ou conectar seu notebook pessoal no projetor. Se sua dupla for utilizar o computador do laboratório, traga seu código fonte e binário compilado em um pen-drive, para facilitar a cópia dos dados antes da apresentação.
+
+A qualidade da apresentação do trabalho final, além da presença da dupla nos dias de apresentações de outros colegas, irá contar para a nota final do trabalho. Cada integrante da dupla irá receber pontuação independente de participação. Qualquer tipo de plágio acarretará nota zero.
+
+Entrega
+Um dos integrantes da dupla deve fazer o envio no Moodle de um arquivo ZIP. Esse ZIP deve conter:
+
+O arquivo metadados-entrega.json, contendo os dados da entrega e apontando para o repositório com o código-fonte completo e documentado e para o local do vídeo;
+
+Esse arquivo deve estar em formato JSON e conter as chaves titulo_trabalho, com o título do trabalho; git_hash_commit_final, com o hash do commit final do trabalho; url_github, com a URL do repositório Git no GitHub; periodo_letivo, com o período letivo da disciplina no formato AAAA/S; local_do_video, com uma URL para o vídeo, uma URL para uma pasta em um serviço de armazenamento em nuvem (como o Google Drive) ou um caminho relativo para o arquivo de vídeo dentro do mesmo ZIP; e integrantes, um array com os integrantes da dupla. Cada integrante deve possuir as chaves nome, cartao_ufrgs, turma (normalmente A, B ou U), nome_de_usuario_no_github e email.
+
+Exemplo de um arquivo metadados-entrega.json válido:
+
+{
+"titulo_trabalho": "Título do Trabalho",
+"git_hash_commit_final": "a1b2c3d4e5f678901234567890abcdef12345678",
+"url_github": "https://github.com/usuario/repositorio",
+"local_do_video": "https://youtu.be/identificador-do-video",
+"periodo_letivo": "2026/2",
+"integrantes": [
+  {
+    "nome": "Nome do Primeiro Integrante",
+    "cartao_ufrgs": "00123456",
+    "turma": "A",
+    "nome_de_usuario_no_github": "primeiro-integrante",
+    "email": "primeiro.integrante@ufrgs.br"
+  },
+  {
+    "nome": "Nome do Segundo Integrante",
+    "cartao_ufrgs": "00987654",
+    "turma": "A",
+    "nome_de_usuario_no_github": "segundo-integrante",
+    "email": "segundo.integrante@ufrgs.br"
+  }
+]
+}
+Não se esqueça de realizar um git commit seguido de um git push ANTES de obter o hash do seu commit final. Caso contrário o professor não conseguirá acessar seu commit final.
+
+O arquivo do vídeo em formato MP4, caso o valor de local_do_video seja um caminho relativo. Se local_do_video contiver uma URL publicamente acessível, o arquivo do vídeo não precisará ser incluído no ZIP.
+Além do conteúdo do ZIP, a entrega deve disponibilizar os seguintes itens:
+
+Relatório em formato de README.md colocado no GitHub, contendo uma descrição simples sobre o desenvolvimento do trabalho, o qual deve obrigatoriamente incluir:
+(Obs: O uso de IA para escrever o relatório é proibido);
+Um parágrafo descrevendo a aplicação que foi desenvolvida.
+Uma descrição da funcionalidade extra implementada pela dupla, conforme definida no arquivo SPEC.md.
+Parágrafo listando as contribuições de cada membro da dupla para o trabalho;
+Parágrafo curto indicando se a dupla fez uso do ChatGPT (ou alguma outra ferramenta similar, como Claude, Gemini, LLaMa, GitHub Copilot, OpenAI Codex, etc.) para desenvolvimento do trabalho, descrevendo como a ferramenta foi utilizada e para quais partes do trabalho. O parágrafo deve também incluir uma análise crítica descrevendo quão útil a dupla achou a ferramenta, onde ela auxiliou e onde ela não auxiliou adequadamente;
+No mínimo duas imagens mostrando o funcionamento da aplicação;
+Um manual descrevendo a utilização da aplicação (atalhos de teclado, etc.);
+Explicação de todos os passos necessários para compilação e execução da aplicação;
+Identificação de qualquer arquivo extra necessário que não esteja disponível no repositório GitHub, acompanhada de instruções explícitas para obtê-lo, por exemplo, através do Moodle, da fonte original ou de um link para uma pasta no Google Drive;
+Um vídeo de 3 a 5 minutos com uma apresentação do trabalho feito pela dupla, incluindo uma demonstração da aplicação gráfica. Para gravar seu vídeo, você pode usar o software OBS Studio. O local do vídeo deve ser informado na chave local_do_video do arquivo metadados-entrega.json. Preferencialmente, utilize uma URL para um vídeo no YouTube (público ou "não listado"). Também é permitido informar a URL de uma pasta em um serviço de armazenamento em nuvem, como o Google Drive. Nesse caso, a dupla deve garantir que o link seja publicamente acessível e que o professor consiga abrir a pasta e assistir ao vídeo sem solicitar permissão. Se você não quiser hospedar o vídeo na internet, pode incluí-lo em formato MP4 no ZIP, com compressão adequada, e informar seu caminho relativo na chave local_do_video (por exemplo, videos/apresentacao.mp4).
+A entrega final deve ser feita impreterivelmente até 23 horas e 55 minutos do dia 11 de dezembro de 2026 (sexta-feira), utilizando o botão "Adicionar tarefa" abaixo.
+
+Critérios de Avaliação
+O professor irá utilizar uma planilha de avaliação com critérios similares ao que é mostrado abaixo:
+
+Critérios técnicos (nota da dupla)
+Interação em tempo real e desempenho adequado;
+Objetivo e lógica de controle não triviais;
+Interação através do mouse e do teclado;
+Implementação própria das matrizes Model, View e Projection;
+Malhas poligonais complexas;
+Transformações geométricas de objetos controladas pelo usuário;
+No mínimo duas câmeras consideravelmente distintas;
+Instâncias de objetos;
+Testes de intersecção com propósito na aplicação e implementados em collisions.*;
+Modelos de iluminação não triviais em todos os objetos;
+Mapeamento de texturas em todos os objetos;
+Movimentação suave de pelo menos um objeto ao longo de um caminho curvo definido por uma curva de Bézier cúbica;
+Animações baseadas no tempo ($\Delta t$);
+Implementação de funcionalidade extra obrigatória;
+Ausência de bugs;
+Estabilidade da aplicação durante a demonstração, sem encerramentos inesperados ou bugs que prejudiquem a apresentação;
+Qualidade visual geral e similaridade às imagens de referência incluídas no arquivo SPEC.md.
+Exemplos de bugs não desejáveis:
+
+Z fighting
+Texturas esticadas
+Colisões que não funcionam corretamente
+Movimentação "travada" ou com "flickering"
+Entre outros
+Critérios de entrega e documentação (nota da dupla)
+Implementação de acordo com o arquivo SPEC.md;
+Coerência entre o SPEC.md, a implementação e o README.md;
+Completude e qualidade do relatório README.md;
+Documentação da funcionalidade extra no SPEC.md e no README.md;
+Arquivo metadados-entrega.json válido e completo;
+Hash do commit final e URL do repositório GitHub válidos e acessíveis;
+Vídeo acessível ao professor e com duração entre 3 e 5 minutos;
+Facilidade de compilação e execução, com instruções corretas e reproduzíveis.
+Critérios de participação e apresentação
+Qualidade da apresentação final (nota da dupla);
+Apresentações parciais nas datas previstas (nota individual);
+Participação nas apresentações finais (nota individual);
+Participação no desenvolvimento do código, de acordo com o histórico do GitHub (nota individual).
+Critérios de conformidade
+Os itens abaixo correspondem a regras eliminatórias ou sujeitas às penalidades especiais descritas anteriormente:
+
+Uso exclusivo de APIs gráficas de baixo nível, sem motores gráficos de alto nível;
+Ausência de plágio;
+Identificação explícita de código gerado por IA nos commits;
+Inclusão dos prompts utilizados para geração de código;
+Identificação das fontes de código e assets copiados e respeito às respectivas licenças;
+Histórico Git demonstrando avanço incremental da implementação;
+Presença de commits realizados pelos dois integrantes.
