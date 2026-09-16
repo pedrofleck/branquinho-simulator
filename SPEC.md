@@ -11,16 +11,16 @@
 
 ## Integrantes da dupla
 
-- **Aluno 1 - Nome**: <mark>`<preencher>`</mark>
-- **Aluno 1 - Cartão UFRGS**: <mark>`<preencher>`</mark>
+- **Aluno 1 - Nome**: <mark>`Eric Peracchi Pisoni`</mark>
+- **Aluno 1 - Cartão UFRGS**: <mark>`00318500`</mark>
 
-- **Aluno 2 - Nome**: <mark>`<preencher>`</mark>
-- **Aluno 2 - Cartão UFRGS**: <mark>`<preencher>`</mark>
+- **Aluno 2 - Nome**: <mark>`Pedro Henrique Freitas Fleck`</mark>
+- **Aluno 2 - Cartão UFRGS**: <mark>`00233700`</mark>
 
 ## Detalhes do que será implementado
 
-- **Título do trabalho**: <mark>`<preencher>`</mark>
-- **Parágrafo curto descrevendo o que será implementado**: <mark>`<preencher>`</mark>
+- **Título do trabalho**: <mark>`Branquinho: Rota do Vale`</mark>
+- **Parágrafo curto descrevendo o que será implementado**: <mark>`Um simulador do ônibus circular do Campus do Vale`</mark>
 
 ## Especificação visual
 
