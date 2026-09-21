@@ -11,16 +11,16 @@
 
 ## Integrantes da dupla
 
-- **Aluno 1 - Nome**: <mark>`Eric Peracchi Pisoni`</mark>
-- **Aluno 1 - Cartão UFRGS**: <mark>`00318500`</mark>
+- **Aluno 1 - Nome**: Eric Peracchi Pisoni
+- **Aluno 1 - Cartão UFRGS**: 00318500
 
-- **Aluno 2 - Nome**: <mark>`Pedro Henrique Freitas Fleck`</mark>
-- **Aluno 2 - Cartão UFRGS**: <mark>`00233700`</mark>
+- **Aluno 2 - Nome**: Pedro Henrique Freitas Fleck
+- **Aluno 2 - Cartão UFRGS**: 00233700
 
 ## Detalhes do que será implementado
 
-- **Título do trabalho**: <mark>`Branquinho: Rota do Vale`</mark>
-- **Parágrafo curto descrevendo o que será implementado**: <mark>`Um simulador do ônibus circular do Campus do Vale`</mark>
+- **Título do trabalho**: Branquinho: Rota do Vale
+- **Parágrafo curto descrevendo o que será implementado**: Um simulador do ônibus circular do Campus do Vale
 
 ## Especificação visual
 
@@ -39,7 +39,7 @@
 >   do próprio repositório. Mas, garanta que qualquer um tenha
 >   permissão de acesso ao vídeo através deste link.
 
-<mark>`<preencher>`</mark>
+https://youtu.be/TE3m94hVeD8
 
 ### Vídeo - Timestamp
 
@@ -48,8 +48,8 @@
 >   será a base de comparação para avaliar se o seu trabalho final
 >   conseguiu ou não reproduzir a referência.
 
-- **Timestamp inicial**: <mark>`<preencher>`</mark>
-- **Timestamp final**: <mark>`<preencher>`</mark>
+- **Timestamp inicial**: 03:30
+- **Timestamp final**: 04:00
 
 ### Imagens
 
@@ -65,46 +65,51 @@
 
 #### Imagem 1
 
-- **Descrição**: <mark>`<preencher>`</mark>
+- **Descrição**: Inspiração de como deve ser a câmera Dashboard em primeira pessoa, com o painel do veículo visível.
 
-![Imagem 1](images/spec/image1.jpg)
+![Imagem 1](images/spec/image1.png)
 
 #### Imagem 2
 
-- **Descrição**: <mark>`<preencher>`</mark>
+- **Descrição**: Câmera Orbit que pode ser controlada lateralmente pelo usuário, mostrando o exterior do ônibus com os passageiros aguardando no ponto para embarcar.
 
-![Imagem 2](images/spec/image2.jpg)
+![Imagem 2](images/spec/image2.png)
 
 #### Imagem 3
 
-- **Descrição**: <mark>`<preencher>`</mark>
+- **Descrição**: Destaque a algumas limitações que serão explicadas ao final do documento, como os espelhos e os botões no painel.
 
-![Imagem 3](images/spec/image3.jpg)
+![Imagem 3](images/spec/image3.png)
 
 ## Especificação textual
 
 Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final - Moodle](https://moodle.ufrgs.br/mod/assign/view.php?id=6302370)), escreva um parágrafo **curto** explicando como este requisito será atendido, apontando itens específicos do vídeo/imagens que você incluiu acima que atendem estes requisitos.
 
 ### Malhas poligonais complexas
-<mark>`<preencher>`</mark>
+Serão implementados diversos modelos 3D com malhas poligonais complexas.
+- O veículo que será conduzido pelo jogador, que é uma representação do ônibus Mascarello Gran Midi 2005 usado na linha circular do Campus do Vale.
+- O cenário do jogo terá elementos que remetem ao Campus do Vale, como prédios, pórtico de entrada e outras estruturas.
 
 ### Transformações geométricas controladas pelo usuário
-<mark>`<preencher>`</mark>
+O veículo virtual será conduzido pelo usuário através de transformações de translação e rotação, que serão aplicadas com base em um modelo simples que simula o comportamento de um automóvel.
 
 ### Diferentes tipos de câmeras
-<mark>`<preencher>`</mark>
+O jogo terá dois tipos de câmera:
+1. Dashboard cam - visão em primeira pessoa, no assento do motorista olhando para frente, com visão do painel do veículo.
+2. Orbit cam - visão em terceira pessoa elevada que pode ser controlada para olhar para os lados.
 
 ### Instâncias de objetos
-<mark>`<preencher>`</mark>
+Alguns objetos, como árvores e postes, serão copiados em múltiplas instâncias para montar o cenário do jogo.
 
 ### Testes de intersecção
-<mark>`<preencher>`</mark>
+Para evitar que o veículo atravesse paredes ou objetos, será implementado testes de colisão entre o veículo e o cenário.
+Também haverá *checkpoints* que o jogador deve atingir.
 
 ### Modelos de Iluminação em todos os objetos
 <mark>`<preencher>`</mark>
 
 ### Mapeamento de texturas em todos os objetos
-<mark>`<preencher>`</mark>
+As texturas aplicadas aos objetos serão adquiridas a partir de fotografias em alta resolução de diferentes pontos do Campus do Vale.
 
 ### Movimentação com curva Bézier cúbica
 <mark>`<preencher>`</mark>
@@ -132,3 +137,6 @@ Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final -
 >   que será implementado parcialmente.
 
 <mark>`<preencher>`</mark>
+- Animações dos personagens
+- Reflexo dos espelhos
+- Interação com botões no painel
