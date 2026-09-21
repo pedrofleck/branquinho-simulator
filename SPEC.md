@@ -125,7 +125,8 @@ As texturas aplicadas aos objetos serão adquiridas a partir de fotografias em a
 > - Esta funcionalidade também deverá ser documentada no arquivo
 >   `README.md` da entrega final.
 
-<mark>`<preencher>`</mark>
+**Sistema de partículas/fumaça:**
+Os pneus do veículo produzem efeitos de fumaça quando submetido a acelerações bruscas, como arrancadas, frenagens e curvas em alta velocidade.
 
 ## Limitações esperadas
 
