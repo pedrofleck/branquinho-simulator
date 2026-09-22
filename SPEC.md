@@ -81,6 +81,12 @@ https://youtu.be/TE3m94hVeD8
 
 ![Imagem 3](images/spec/image3.png)
 
+#### Extra (gráficos):
+
+- **Descrição**: Outra referência de gráficos que buscamos alcançar é o jogo Slowroads, que pode ser jogado diretamente do navegador através do link https://slowroads.io/
+
+![Imagem 4](images/spec/image4.jpg)
+
 ## Especificação textual
 
 Para cada um dos requisitos abaixo (detalhados no [Enunciado do Trabalho final - Moodle](https://moodle.ufrgs.br/mod/assign/view.php?id=6302370)), escreva um parágrafo **curto** explicando como este requisito será atendido, apontando itens específicos do vídeo/imagens que você incluiu acima que atendem estes requisitos.
@@ -106,16 +112,16 @@ Para evitar que o veículo atravesse paredes ou objetos, será implementado test
 Também haverá *checkpoints* que o jogador deve atingir.
 
 ### Modelos de Iluminação em todos os objetos
-<mark>`<preencher>`</mark>
+Será implementado *Phong shading* nos objetos do jogo.
 
 ### Mapeamento de texturas em todos os objetos
 As texturas aplicadas aos objetos serão adquiridas a partir de fotografias em alta resolução de diferentes pontos do Campus do Vale.
 
 ### Movimentação com curva Bézier cúbica
-<mark>`<preencher>`</mark>
+Os pedestres que caminham na calçada terão sua movimentação definida por curvas de Bézier.
 
 ### Animações baseadas no tempo ($\Delta t$)
-<mark>`<preencher>`</mark>
+As animações dos pedestres caminhando serão baseadas no tempo.
 
 ### Funcionalidade extra obrigatória
 
@@ -137,7 +143,7 @@ Os pneus do veículo produzem efeitos de fumaça quando submetido a aceleraçõe
 > - Para cada item, **explique por que** não será implementado ou por
 >   que será implementado parcialmente.
 
-<mark>`<preencher>`</mark>
-- Animações dos personagens
-- Reflexo dos espelhos
-- Interação com botões no painel
+- Dashboard cam: possivelmente encontraremos problemas na implementação de uma câmera interna que mostra o painel do veículo.
+Caso isso aconteça, utilizaremos uma Bumper cam, que é uma câmera localizada no exterior do ônibus, diretamente à frente do para-choque.
+- Buscamos utilizar fotografias reais para atingir um visual um pouco mais fotorrealista, mas caso os resultados não atinjam nossas expectativas, vamos optar por um visual mais minimalista, com texturas mais simples.
+- Animações dos pedestres: reconhecemos que fazer animações realistas de pessoas caminhando seria um desafio consideravelmente difícil, então optamos por animações mais simples para os pedestres.
