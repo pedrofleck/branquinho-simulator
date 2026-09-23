@@ -42,17 +42,17 @@
 
 - **Descrição**: Outra referência de gráficos que buscamos alcançar é o jogo Slowroads, que pode ser jogado diretamente do navegador através do link https://slowroads.io/
 
-![Imagem 4](images/spec/image3.jpg)
+![Imagem 3](images/spec/image3.jpg)
 
 ## Especificação textual
 
 ### Malhas poligonais complexas
-Serão implementados diversos modelos 3D com malhas poligonais complexas.
+- Serão implementados diversos modelos 3D com malhas poligonais complexas.
 - O veículo que será conduzido pelo jogador, que é uma representação do ônibus Mascarello Gran Midi 2005 usado na linha circular do Campus do Vale.
 - O cenário do jogo terá elementos que remetem ao Campus do Vale, como prédios, pórtico de entrada e outras estruturas.
 
 ### Transformações geométricas controladas pelo usuário
-O veículo virtual será conduzido pelo usuário através de transformações de translação e rotação, que serão aplicadas com base em um modelo simples que simula o comportamento de um automóvel.
+- O veículo virtual será conduzido pelo usuário através de transformações de translação e rotação, que serão aplicadas com base em um modelo simples que simula o comportamento de um automóvel.
 
 ### Diferentes tipos de câmeras
 O jogo terá dois tipos de câmera:
@@ -60,29 +60,31 @@ O jogo terá dois tipos de câmera:
 2. Orbit cam - visão em terceira pessoa elevada que pode ser controlada para olhar para os lados.
 
 ### Instâncias de objetos
-Alguns objetos, como árvores e postes, serão copiados em múltiplas instâncias para montar o cenário do jogo.
+- Alguns objetos, como árvores e postes, serão copiados em múltiplas instâncias para montar o cenário do jogo.
 
 ### Testes de intersecção
-Para evitar que o veículo atravesse paredes ou objetos, será implementado testes de colisão entre o veículo e o cenário.
+- Para evitar que o veículo atravesse paredes ou objetos, será implementado testes de colisão entre o veículo e o cenário.
 Também haverá *checkpoints* que o jogador deve atingir.
 
 ### Modelos de Iluminação em todos os objetos
-Será implementado *Phong shading* nos objetos do jogo.
+- Será implementado o sistema de iluminação *Disney BRDF* como iluminação global.
+- 
+Comentário Professor: Implementem os seguintes efeitos presentes na referência visual: névoa volumétrica, iluminação dos postes, vidros transparentes e espelhos retrovisores.
 
 ### Mapeamento de texturas em todos os objetos
-As texturas aplicadas aos objetos serão adquiridas a partir de fotografias em alta resolução de diferentes pontos do Campus do Vale.
+- As texturas aplicadas aos objetos serão adquiridas a partir de fotografias em alta resolução de diferentes pontos do Campus do Vale.
 
 ### Movimentação com curva Bézier cúbica
-Os pedestres que caminham na calçada terão sua movimentação definida por curvas de Bézier.
+- Os pedestres que caminham na calçada terão sua movimentação definida por curvas de Bézier.
 
 ### Animações baseadas no tempo ($\Delta t$)
-As animações dos pedestres e passageiros caminhando serão baseadas no tempo.
-O veículo tera física se deslocando por terrenos com relevo, como a subida e descida, quebra-molas e desníveis de terreno, isso também se baseará em tempo.
+- As animações dos pedestres e passageiros caminhando serão baseadas no tempo.
+- O veículo tera física se deslocando por terrenos com relevo, como a subida e descida, quebra-molas e desníveis de terreno, isso também se baseará em tempo.
 
 ### Funcionalidade extra obrigatória
 
 **Sistema de partículas/fumaça:**
-Os pneus do veículo produzem efeitos de fumaça quando submetido a acelerações bruscas, como arrancadas, frenagens e curvas em alta velocidade.
+- Os pneus do veículo produzem efeitos de fumaça quando submetido a acelerações bruscas, como arrancadas, frenagens e curvas em alta velocidade.
 
 ## Limitações esperadas
 
