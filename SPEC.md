@@ -79,6 +79,8 @@ https://youtu.be/TE3m94hVeD8
 
 - **Descrição**: Destaque a algumas limitações que serão explicadas ao final do documento, como os espelhos e os botões no painel.
 
+> Comentário Professor: Implementem os seguintes efeitos presentes na referência visual: névoa volumétrica, iluminação dos postes, vidros transparentes e espelhos retrovisores.
+
 ![Imagem 3](images/spec/image3.png)
 
 #### Extra (gráficos):
@@ -122,6 +124,8 @@ Os pedestres que caminham na calçada terão sua movimentação definida por cur
 
 ### Animações baseadas no tempo ($\Delta t$)
 As animações dos pedestres caminhando serão baseadas no tempo.
+
+> Comentário Professor: Implementem a física do veículo ao se deslocar por terrenos com relevo conforme as referências visuais. Baseiem essa movimentação no tempo também.
 
 ### Funcionalidade extra obrigatória
 
