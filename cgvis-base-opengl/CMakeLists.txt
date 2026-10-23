@@ -14,7 +14,7 @@ set(SOURCES
   src/glad.c
 )
 
-cmake_minimum_required(VERSION 3.5.0)
+cmake_minimum_required(VERSION 3.10)
 
 project(LAB_FCG VERSION 1.0.0)
 

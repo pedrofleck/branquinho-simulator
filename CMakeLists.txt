@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.20)
+project(branquinho_simulator)
+
+# Variável para escolher a API (padrão: OpenGL)
+option(USE_VULKAN "Compilar backend Vulkan" OFF)
+
+if(USE_VULKAN)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cgvis-base-vulkan/CMakeLists.txt")
+        message(STATUS "Configurando backend: Vulkan")
+        add_subdirectory(cgvis-base-vulkan)
+    else()
+        message(FATAL_ERROR "Pasta cgvis-base-vulkan não encontrada ou sem CMakeLists.txt!")
+    endif()
+else()
+    message(STATUS "Configurando backend: OpenGL")
+    add_subdirectory(cgvis-base-opengl)
+endif()

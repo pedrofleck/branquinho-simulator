@@ -1,7 +1,43 @@
-# Local
+# --- Ficheiros e Diretórios Locais do VS Code / Workspace ---
 .vscode/
+*.code-workspace
 
-# Build
+# --- CMake ---
 build/
-bin/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
 
+# --- Binários e Executáveis ---
+bin/
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+
+# --- Ficheiros Objeto e Bibliotecas Estáticas ---
+*.o
+*.obj
+*.a
+*.lib
+
+# --- Símbolos de Depuração ---
+*.pdb
+*.ilk
+
+# --- Vulkan (Shaders Compilados) ---
+# Ignora binários SPIR-V gerados a partir de .vert / .frag
+*.spv
+
+# --- Sistema Operativo e Ficheiros Temporários ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*~
+*.swp
+.vs/

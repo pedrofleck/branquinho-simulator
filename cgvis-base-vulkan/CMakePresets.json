@@ -1,36 +1,16 @@
 {
-  "version": 6,
-  "configurePresets": [
-    {
-      "name": "default-config",
-      "generator": "MinGW Makefiles",
-      "binaryDir": "${sourceDir}/build"
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "default-build",
-      "configurePreset": "default-config"
-    },
-    {
-      "name": "build-run",
-      "configurePreset": "default-config",
-      "targets": ["run"]
-    }
-  ],
-  "workflowPresets": [
-    {
-      "name": "configure-build-run",
-      "steps": [
+    "version": 8,
+    "configurePresets": [
         {
-          "type": "configure",
-          "name": "default-config"
-        },
-        {
-          "type": "build",
-          "name": "build-run"
+            "name": "Custom configure preset",
+            "displayName": "Custom configure preset",
+            "description": "Sets Ninja generator, build and install directory",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
         }
-      ]
-    }
-  ]
+    ]
 }

@@ -1,0 +1,39 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "opengl-mingw",
+      "displayName": "OpenGL (MinGW)",
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/build/opengl",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+        "USE_VULKAN": "OFF"
+      }
+    },
+    {
+      "name": "vulkan-mingw",
+      "displayName": "Vulkan (MinGW)",
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/build/vulkan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
+        "USE_VULKAN": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-opengl",
+      "displayName": "Build OpenGL",
+      "configurePreset": "opengl-mingw"
+    },
+    {
+      "name": "build-vulkan",
+      "displayName": "Build Vulkan",
+      "configurePreset": "vulkan-mingw"
+    }
+  ]
+}
