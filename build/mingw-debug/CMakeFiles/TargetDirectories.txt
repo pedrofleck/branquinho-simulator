@@ -1,5 +1,0 @@
-C:/Dev/Repos/branquinho-simulator/build/mingw-debug/CMakeFiles/edit_cache.dir
-C:/Dev/Repos/branquinho-simulator/build/mingw-debug/CMakeFiles/rebuild_cache.dir
-C:/Dev/Repos/branquinho-simulator/build/mingw-debug/cgvis-base-opengl/CMakeFiles/main.dir
-C:/Dev/Repos/branquinho-simulator/build/mingw-debug/cgvis-base-opengl/CMakeFiles/edit_cache.dir
-C:/Dev/Repos/branquinho-simulator/build/mingw-debug/cgvis-base-opengl/CMakeFiles/rebuild_cache.dir
