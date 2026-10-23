@@ -22,6 +22,7 @@ uniform mat4 projection;
 #define SPHERE 0
 #define BUNNY  1
 #define PLANE  2
+#define BUS    3
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -124,6 +125,15 @@ void main()
 
 		// Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
 		Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+    }
+    else if ( object_id == BUS )
+    {
+        // Coordenadas UV vindas diretamente dos atributos 'vt' do ficheiro .obj
+        U = texcoords.x;
+        V = texcoords.y;
+
+   		Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+
     }
     else if ( object_id == PLANE )
     {

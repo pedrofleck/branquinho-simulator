@@ -315,6 +315,10 @@ int main(int argc, char* argv[])
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
+    ObjModel branquinhomodel("../../../data/branquinho.obj");
+    ComputeNormals(&branquinhomodel);
+    BuildTrianglesAndAddToVirtualScene(&branquinhomodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -410,26 +414,39 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE 0
-        #define BUNNY  1
-        #define PLANE  2
+        #define SPHERE      0
+        #define BUNNY       1
+        #define PLANE       2
+        #define BUS         3
 
-        // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(0.6f)
-              * Matrix_Rotate_X(0.2f)
-              * Matrix_Rotate_Y(g_AngleY + (float)glfwGetTime() * 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, SPHERE);
-        DrawVirtualObject("the_sphere");
+// 1. Translação para o centro/altura correta
+        // 2. Rotação em Y com o tempo (faz o autocarro girar continuamente)
+        // 3. Rotação de -90 graus (-PI/2) em X para deitar o modelo do Blender (Z-up -> Y-up)
+        // 4. Escala para ajustar ao tamanho da cena
+        model = Matrix_Translate(0.0f, -0.4f, 0.0f)
+              * Matrix_Rotate_Y((float)glfwGetTime())
+              * Matrix_Rotate_X(-3.14159265f / 2.0f)
+              * Matrix_Scale(0.25f, 0.25f, 0.25f);
 
-        // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_X(g_AngleX + (float)glfwGetTime() * 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, BUNNY);
-        DrawVirtualObject("the_bunny");
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, BUS);
 
+        // Desenha todas as partes que compõem o modelo .obj
+        for (size_t s = 0; s < branquinhomodel.shapes.size(); ++s)
+        {
+            DrawVirtualObject(branquinhomodel.shapes[s].name.c_str());
+        }
+
+        glDisable(GL_CULL_FACE); // Permite ver faces de dois lados
+
+        // Desenha todas as partes que compõem o modelo .obj
+        for (size_t s = 0; s < branquinhomodel.shapes.size(); ++s)
+        {
+            DrawVirtualObject(branquinhomodel.shapes[s].name.c_str());
+        }
+
+        glEnable(GL_CULL_FACE); // Reativa para o chão
+        
         // Desenhamos o plano do chão
         model = Matrix_Translate(0.0f,-1.1f,0.0f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
