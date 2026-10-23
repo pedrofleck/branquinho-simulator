@@ -1,0 +1,30 @@
+cgvis-base-opengl/CMakeFiles/main.dir/src/correcao.cpp.obj: \
+ C:\Dev\Repos\branquinho-simulator\cgvis-base-opengl\src\correcao.cpp \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/cstdlib \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32/bits/c++config.h \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32/bits/os_defines.h \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/x86_64-w64-mingw32/bits/cpu_defines.h \
+ C:/Dev/msys64/ucrt64/include/stdlib.h \
+ C:/Dev/msys64/ucrt64/include/corecrt.h \
+ C:/Dev/msys64/ucrt64/include/_mingw.h \
+ C:/Dev/msys64/ucrt64/include/_mingw_mac.h \
+ C:/Dev/msys64/ucrt64/include/_mingw_secapi.h \
+ C:/Dev/msys64/ucrt64/include/vadefs.h \
+ C:/Dev/msys64/ucrt64/include/sdks/_mingw_ddk.h \
+ C:/Dev/msys64/ucrt64/include/corecrt_wstdlib.h \
+ C:/Dev/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/limits.h \
+ C:/Dev/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/syslimits.h \
+ C:/Dev/msys64/ucrt64/include/limits.h \
+ C:/Dev/msys64/ucrt64/include/crtdefs.h \
+ C:/Dev/msys64/ucrt64/include/sec_api/stdlib_s.h \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/stdlib.h \
+ C:/Dev/msys64/ucrt64/include/malloc.h \
+ C:/Dev/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/mm_malloc.h \
+ C:/Dev/msys64/ucrt64/include/errno.h \
+ C:/Dev/msys64/ucrt64/include/c++/15.2.0/bits/std_abs.h \
+ C:/Dev/Repos/branquinho-simulator/cgvis-base-opengl/include/GLFW/glfw3.h \
+ C:/Dev/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/stddef.h \
+ C:/Dev/msys64/ucrt64/include/stddef.h \
+ C:/Dev/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/stdint.h \
+ C:/Dev/msys64/ucrt64/include/stdint.h \
+ C:/Dev/msys64/ucrt64/include/GL/gl.h

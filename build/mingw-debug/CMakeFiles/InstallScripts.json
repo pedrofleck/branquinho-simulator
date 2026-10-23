@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Dev/Repos/branquinho-simulator/build/mingw-debug/cmake_install.cmake",
+		"C:/Dev/Repos/branquinho-simulator/build/mingw-debug/cgvis-base-opengl/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
