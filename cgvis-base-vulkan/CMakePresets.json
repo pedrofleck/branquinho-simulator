@@ -3,6 +3,7 @@
   "configurePresets": [
     {
       "name": "default-config",
+      "generator": "MinGW Makefiles",
       "binaryDir": "${sourceDir}/build"
     }
   ],

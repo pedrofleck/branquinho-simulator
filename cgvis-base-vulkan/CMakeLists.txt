@@ -38,6 +38,10 @@ set(CMAKE_CXX_STANDARD          11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS        OFF)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
 if(WIN32)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${PROJECT_SOURCE_DIR}/bin/Debug")
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_SOURCE_DIR}/bin/Release")
@@ -48,9 +52,6 @@ elseif(UNIX)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin/Linux")
 endif()
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
-endif()
 message(STATUS
   "Build type: ${CMAKE_BUILD_TYPE}
 
@@ -88,7 +89,11 @@ message(STATUS "Vulkan encontrado: ${Vulkan_LIBRARY}")
 if(NOT Vulkan_GLSLC_EXECUTABLE)
   find_program(Vulkan_GLSLC_EXECUTABLE
     NAMES glslc
-    HINTS "$ENV{VULKAN_SDK}/bin" "$ENV{VULKAN_SDK}/Bin"
+    HINTS
+      "${Vulkan_ROOT}/bin"
+      "${Vulkan_ROOT}/Bin"
+      "$ENV{VULKAN_SDK}/bin"
+      "$ENV{VULKAN_SDK}/Bin"
   )
 endif()
 
