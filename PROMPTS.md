@@ -1,4 +1,15 @@
 # Adaptar código base OpenGL para Vulkan
 
-PROMPT: Vou fazer um trabalho de computação gráfica, as especificações se encontram no arquivo spec.txt. Foi fornecida uma base de código OpenGL, que se encontra no submodule cgvis-base-trabalho-final. Adapte as funcionalidades oferecidas para Vulkan, levando em consideração as restrições impostas na especificação do trabalho.
+PROMPT: Adapte as funcionalidades do código base OpenGL para Vulkan, considerando as restrições impostas na especificação do trabalho.
 
+---
+
+# Modularização do código OpenGL
+
+PROMPT: Separe o código de main.cpp em módulos distintos (scene, camera, bus) preservando todas as funcionalidades existentes e verifique a compilação no backend OpenGL.
+
+---
+
+# Limpeza e simplificação do main.cpp
+
+PROMPT: Remova todo o código legado e não utilizado de main.cpp (modelos antigos, variáveis de torso/antebraço, ângulos de Euler e textos de debug), mantendo apenas a renderização do ônibus com textura e o plano, e verifique se a compilação continua funcionando.
