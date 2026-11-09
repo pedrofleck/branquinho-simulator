@@ -8,21 +8,14 @@
 //     desenhado (object_id): coordenadas do .obj para o ônibus e o plano,
 //     ou projeções esférica/planar para objetos de teste;
 //   - Amostrar a refletância difusa (Kd) das texturas;
-//   - Aplicar o modelo de iluminação (atualmente difuso/Lambert) e a correção
-//     gamma para produzir a cor final do pixel.
+//   - Aplicar o modelo de iluminação (Difuso + Especular Blinn-Phong/BRDF),
+//     névoa exponencial por distância e correção gamma (sRGB).
 // ============================================================================
 
 // Atributos de fragmentos recebidos como entrada ("in") pelo Fragment Shader.
-// Neste exemplo, este atributo foi gerado pelo rasterizador como a
-// interpolação da posição global e a normal de cada vértice, definidas em
-// "shader_vertex.glsl" e "main.cpp".
 in vec4 position_world;
 in vec4 normal;
-
-// Posição do vértice atual no sistema de coordenadas local do modelo.
 in vec4 position_model;
-
-// Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
 in vec2 texcoords;
 
 // Matrizes computadas no código C++ e enviadas para a GPU
@@ -46,6 +39,13 @@ uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
 
+// Parâmetros do sistema de iluminação (módulo lighting.h / lighting.cpp)
+uniform vec4  sun_direction;
+uniform vec3  sun_color;
+uniform vec3  ambient_color;
+uniform vec3  fog_color;
+uniform float fog_density;
+
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
 
@@ -55,129 +55,94 @@ out vec4 color;
 
 void main()
 {
-    // Obtemos a posição da câmera utilizando a inversa da matriz que define o
-    // sistema de coordenadas da câmera.
+    // Obtemos a posição da câmera utilizando a inversa da matriz View
     vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
     vec4 camera_position = inverse(view) * origin;
 
-    // O fragmento atual é coberto por um ponto que percente à superfície de um
-    // dos objetos virtuais da cena. Este ponto, p, possui uma posição no
-    // sistema de coordenadas global (World coordinates). Esta posição é obtida
-    // através da interpolação, feita pelo rasterizador, da posição de cada
-    // vértice.
+    // Ponto atual da superfície em coordenadas do mundo (World coordinates)
     vec4 p = position_world;
 
-    // Normal do fragmento atual, interpolada pelo rasterizador a partir das
-    // normais de cada vértice.
+    // Normal da superfície e vetores de luz (l), visão (v) e half-vector (h)
     vec4 n = normalize(normal);
-
-    // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
-
-    // Vetor que define o sentido da câmera em relação ao ponto atual.
+    vec4 l = normalize(sun_direction);
     vec4 v = normalize(camera_position - p);
+    vec4 h = normalize(l + v);
 
     // Coordenadas de textura U e V
     float U = 0.0;
     float V = 0.0;
 
-	// Coeficiente de refletância difusa
-	vec3 Kd0;
+    // Propriedades ópticas da superfície (difusa Kd, especular Ks e expoente q)
+    vec3  Kd0 = vec3(0.8, 0.8, 0.8);
+    vec3  Ks  = vec3(0.2, 0.2, 0.2);
+    float q   = 32.0;
 
     if ( object_id == SPHERE )
     {
-        // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
-        // projeção esférica EM COORDENADAS DO MODELO. Utilize como referência
-        // o slides 134-150 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // A esfera que define a projeção deve estar centrada na posição
-        // "bbox_center" definida abaixo.
-
-        // Você deve utilizar:
-        //   função 'length( )' : comprimento Euclidiano de um vetor
-        //   função 'atan( , )' : arcotangente. Veja https://en.wikipedia.org/wiki/Atan2.
-        //   função 'asin( )'   : seno inverso.
-        //   constante M_PI
-        //   variável position_model
-
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
         vec4 d = position_model - bbox_center;
 
         float rho   = length(d);
-        float theta = atan(d.x,d.z);
+        float theta = atan(d.x, d.z);
         float phi   = asin(d.y / rho);
 
         U = (theta + M_PI) / 2.0 / M_PI;
         V = (phi + M_PI_2) / M_PI;
 
-		// Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-		Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+        Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
     }
     else if ( object_id == BUNNY )
     {
-        // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
-        // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
-        // o slides 99-104 do documento Aula_20_Mapeamento_de_Texturas.pdf,
-        // e também use as variáveis min*/max* definidas abaixo para normalizar
-        // as coordenadas de textura U e V dentro do intervalo [0,1]. Para
-        // tanto, veja por exemplo o mapeamento da variável 'p_v' utilizando
-        // 'h' no slides 158-160 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // Veja também a Questão 4 do Questionário 4 no Moodle.
-
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
-
         float miny = bbox_min.y;
         float maxy = bbox_max.y;
-
-        float minz = bbox_min.z;
-        float maxz = bbox_max.z;
 
         U = (position_model.x - minx) / (maxx - minx);
         V = (position_model.y - miny) / (maxy - miny);
 
-		// Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-		Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+        Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
     }
     else if ( object_id == BUS )
     {
-        // Coordenadas UV vindas diretamente dos atributos 'vt' do ficheiro .obj
         U = texcoords.x;
         V = texcoords.y;
 
-   		Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-
+        Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
+        Ks  = vec3(0.35, 0.35, 0.35); // Brilho especular da lataria
+        q   = 64.0;
     }
     else if ( object_id == PLANE )
     {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
         U = texcoords.x;
         V = texcoords.y;
 
-		// Obtemos a refletância difusa a partir da leitura da imagem TextureImage1
-		Kd0 = texture(TextureImage1, vec2(U,V)).rgb;
+        Kd0 = texture(TextureImage1, vec2(U, V)).rgb;
+        Ks  = vec3(0.05, 0.05, 0.05); // Chão mais fosco (menos reflexo especular)
+        q   = 16.0;
     }
 
-    // Equação de Iluminação
-    float lambert = max(0,dot(n,l));
+    // 1. Termo Difuso (Lambert) + Termo Especular (Blinn-Phong com half-vector h)
+    float NdotL = max(0.0, dot(n, l));
+    float NdotH = max(0.0, dot(n, h));
+    float LdotH = max(0.0, dot(l, h));
 
-    color.rgb = Kd0 * (lambert + 0.01);
+    // Aproximação de Schlick para o efeito Fresnel (base do Disney BRDF):
+    // ângulos rasantes refletem mais luz especular
+    vec3 fresnel = Ks + (vec3(1.0) - Ks) * pow(1.0 - LdotH, 5.0);
+    vec3 specular_term = fresnel * pow(NdotH, q) * NdotL;
 
-    // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
-    // necessário:
-    // 1) Habilitar a operação de "blending" de OpenGL logo antes de realizar o
-    //    desenho dos objetos transparentes, com os comandos abaixo no código C++:
-    //      glEnable(GL_BLEND);
-    //      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    // 2) Realizar o desenho de todos objetos transparentes *após* ter desenhado
-    //    todos os objetos opacos; e
-    // 3) Realizar o desenho de objetos transparentes ordenados de acordo com
-    //    suas distâncias para a câmera (desenhando primeiro objetos
-    //    transparentes que estão mais longe da câmera).
-    // Alpha default = 1 = 100% opaco = 0% transparente
-    color.a = 1;
+    // Combinação da luz ambiente do céu + luz direta do Sol (difusa + especular)
+    vec3 lit_color = Kd0 * ambient_color + (Kd0 * NdotL + specular_term) * sun_color;
 
-    // Cor final com correção gamma, considerando monitor sRGB.
-    // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
-    color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
-} 
+    // 2. Correção gamma na cor iluminada (espaço linear -> sRGB)
+    lit_color = pow(lit_color, vec3(1.0, 1.0, 1.0) / 2.2);
 
+    // 3. Névoa Exponencial com a distância até a câmera (funde suavemente com o céu)
+    float dist = length(camera_position - p);
+    float fog_factor = exp(-fog_density * dist);
+    fog_factor = clamp(fog_factor, 0.0, 1.0);
+
+    color.rgb = mix(fog_color, lit_color, fog_factor);
+    color.a = 1.0;
+}

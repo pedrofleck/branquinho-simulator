@@ -16,6 +16,12 @@ PROMPT: Remova todo o código legado e não utilizado de main.cpp (modelos antig
 
 ---
 
-# Comentários de cabeçalho nos arquivos de código fonte
+# Sistema de iluminação solar, hora do dia e névoa
 
-PROMPT: Escreva um comentário cabeçalho para cada arquivo de código fonte na pasta cgvis-base-opengl/src/ explicando sobre o que aquele arquivo é responsável. Alguns arquivos já possuem um cabeçalho, cuidado para não sobrescrever.
+PROMPT: Crie um módulo de iluminação (lighting.h e lighting.cpp) com suporte à posição do Sol (hora do dia), cor ambiente e névoa exponencial, e atualize o fragment shader com iluminação difusa e especular (Blinn-Phong com Fresnel).
+
+---
+
+# Sistema de iluminação solar, hora do dia e névoa
+
+PROMPT: Crie um módulo de iluminação (lighting.h e lighting.cpp) com suporte à posição do Sol (hora do dia), cor ambiente e névoa exponencial, e atualize o fragment shader com iluminação difusa e especular (Blinn-Phong com Fresnel).

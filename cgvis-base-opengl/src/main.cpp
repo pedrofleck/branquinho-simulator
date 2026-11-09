@@ -20,6 +20,7 @@
 #include "scene.h"
 #include "camera.h"
 #include "bus.h"
+#include "lighting.h"
 
 // Funções para renderização de texto e FPS (textrendering.cpp)
 void TextRendering_Init();
@@ -108,10 +109,14 @@ int main(int argc, char* argv[])
 
     while (!glfwWindowShouldClose(window))
     {
-        glClearColor(0.9f, 0.9f, 1.0f, 1.0f);
+        glm::vec3 sky_color = g_Lighting.GetSkyColor();
+        glClearColor(sky_color.r, sky_color.g, sky_color.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(g_GpuProgramID);
+
+        // Envia parâmetros do Sol, luz ambiente e névoa ao Fragment Shader
+        g_Lighting.ApplyUniforms(g_GpuProgramID);
 
         // Matrizes View e Projection computadas pela Camera
         glm::mat4 view = g_Camera.ComputeViewMatrix();
@@ -165,6 +170,8 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 {
     Correcao_KeyCallback(key, action, mod);
+
+    g_Lighting.OnKey(key, action);
 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);

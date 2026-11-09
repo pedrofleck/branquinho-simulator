@@ -10,6 +10,7 @@ set(SOURCES
   src/scene.cpp
   src/camera.cpp
   src/bus.cpp
+  src/lighting.cpp
   src/correcao.cpp
   src/textrendering.cpp
   src/tiny_obj_loader.cpp
