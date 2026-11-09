@@ -1,7 +1,7 @@
 # Roteiro do Projeto: Branquinho Simulator
 
 ## Objetivo Imediato: Ônibus Andando e Câmera
-- [ ] **Limpar `main.cpp`**: tirar sobras dos labs (coelho, esfera, braço/torso, cubos de Euler) e manter só o chão e o ônibus.
+- [x] **Limpar `main.cpp`**: tirar sobras dos labs (coelho, esfera, braço/torso, cubos de Euler) e manter só o chão e o ônibus.
 - [ ] **Ajustar a cena**: aumentar a escala do chão (`plane.obj`) e aumentar o `farplane` para a visão não cortar no fundo.
 - [ ] **Tempo de quadro ($\Delta t$)**: calcular o tempo entre frames para movimentação estável independente do FPS.
 - [ ] **Controle do ônibus (WASD)**:
