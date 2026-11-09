@@ -1,3 +1,15 @@
+// ============================================================================
+// buildtriangles.cpp - Exemplo legado de construção de geometria em NDC
+//
+// Código de laboratório anterior da disciplina. Define BuildTriangles(), que
+// cria manualmente um VAO com vértices em coordenadas NDC, cores por vértice
+// e índices de triângulos, servindo como referência didática do pipeline
+// (VAO/VBO/EBO).
+//
+// OBS.: este arquivo NÃO é compilado no executável atual (não consta no
+// CMakeLists.txt); mantido apenas como referência.
+// ============================================================================
+
 #include <glad/glad.h> // Acesso para funções de OpenGL
 
 // Constrói triângulos para futura renderização

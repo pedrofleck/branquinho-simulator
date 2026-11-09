@@ -1,3 +1,14 @@
+// ============================================================================
+// correcao.cpp - Rotina de correção automatizada da disciplina (INF01047)
+//
+// Fornecido pela disciplina. Define Correcao_KeyCallback(), que encerra o
+// programa com um código de saída específico (100 + dígito) quando o usuário
+// pressiona SHIFT + [0-9]. É utilizada pelos scripts de correção automática.
+//
+// NÃO MODIFICAR. A chamada Correcao_KeyCallback(key, action, mod) deve ser
+// sempre a primeira instrução de KeyCallback() em main.cpp.
+// ============================================================================
+
 #include <cstdlib>
 #include <GLFW/glfw3.h>
 

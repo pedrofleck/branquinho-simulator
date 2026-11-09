@@ -1,3 +1,18 @@
+// ============================================================================
+// scene.cpp - Cena virtual e infraestrutura de GPU
+//
+// Responsável por:
+//   - Definir as variáveis globais da cena virtual (g_VirtualScene), da pilha
+//     de matrizes (g_MatrixStack) e dos identificadores de programa/uniforms
+//     da GPU;
+//   - Carregar modelos .obj (ObjModel, via tinyobjloader), calcular normais
+//     quando ausentes e enviar a geometria para a GPU (VAO/VBOs), registrando
+//     cada shape como um SceneObject desenhável por nome (DrawVirtualObject);
+//   - Carregar texturas a partir de imagens (via stb_image);
+//   - Ler, compilar e linkar os shaders GLSL (vertex/fragment) e obter as
+//     localizações das variáveis uniform utilizadas na renderização.
+// ============================================================================
+
 #include "scene.h"
 
 #include <cmath>

@@ -1,5 +1,17 @@
 #version 330 core
 
+// ============================================================================
+// shader_vertex.glsl - Vertex Shader principal da cena
+//
+// Executado uma vez por vértice na GPU. Responsável por:
+//   - Transformar a posição do vértice do espaço do modelo para clip space
+//     (gl_Position = projection * view * model * posição);
+//   - Calcular e repassar ao rasterizador os atributos a serem interpolados
+//     para o Fragment Shader: posição no mundo, posição no modelo, normal no
+//     mundo (via inversa da transposta da matriz Model) e coordenadas de
+//     textura vindas do arquivo .obj.
+// ============================================================================
+
 // Atributos de vértice recebidos como entrada ("in") pelo Vertex Shader.
 // Veja a função BuildTrianglesAndAddToVirtualScene() em "main.cpp".
 layout (location = 0) in vec4 model_coefficients;

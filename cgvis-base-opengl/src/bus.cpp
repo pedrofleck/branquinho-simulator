@@ -1,3 +1,18 @@
+// ============================================================================
+// bus.cpp - Entidade do ônibus "Branquinho" (Mascarello Gran Midi)
+//
+// Responsável pelo estado do veículo na cena (posição, escala e, futuramente,
+// orientação/velocidade) e pela composição da sua matriz Model:
+//
+//     M_bus = Translate(pos) * Rotate_Y(yaw) * Rotate_X(-pi/2) * Scale(s)
+//
+// onde Rotate_X(-pi/2) converte o modelo exportado do Blender (Z-up) para a
+// convenção Y-up da cena. Também desenha todas as shapes do ObjModel do ônibus
+// enviando a matriz Model e o object_id BUS para os shaders.
+//
+// Todas as transformações usam exclusivamente as funções de "matrices.h".
+// ============================================================================
+
 #include "bus.h"
 
 #include <GLFW/glfw3.h>

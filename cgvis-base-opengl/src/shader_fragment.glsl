@@ -1,5 +1,17 @@
 #version 330 core
 
+// ============================================================================
+// shader_fragment.glsl - Fragment Shader principal da cena
+//
+// Executado uma vez por fragmento na GPU. Responsável por:
+//   - Determinar as coordenadas de textura (U,V) de acordo com o objeto sendo
+//     desenhado (object_id): coordenadas do .obj para o ônibus e o plano,
+//     ou projeções esférica/planar para objetos de teste;
+//   - Amostrar a refletância difusa (Kd) das texturas;
+//   - Aplicar o modelo de iluminação (atualmente difuso/Lambert) e a correção
+//     gamma para produzir a cor final do pixel.
+// ============================================================================
+
 // Atributos de fragmentos recebidos como entrada ("in") pelo Fragment Shader.
 // Neste exemplo, este atributo foi gerado pelo rasterizador como a
 // interpolação da posição global e a normal de cada vértice, definidas em

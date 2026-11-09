@@ -1,3 +1,20 @@
+// ============================================================================
+// camera.cpp - Câmera orbital (look-at) e projeção
+//
+// Responsável por:
+//   - Manter o estado da câmera em coordenadas esféricas (theta, phi,
+//     distance) em torno de um ponto de interesse (look-at), tipicamente o
+//     ônibus;
+//   - Tratar a entrada do mouse que controla a câmera (arrastar com o botão
+//     esquerdo altera theta/phi; scroll altera a distância);
+//   - Calcular a matriz View via Matrix_Camera_View() e a matriz Projection
+//     (perspectiva ou ortográfica) via Matrix_Perspective()/Matrix_Orthographic(),
+//     considerando a razão de aspecto da janela e os planos near/far.
+//
+// Todas as matrizes são construídas exclusivamente com as funções de
+// "matrices.h" (proibido usar glm::lookAt, glm::perspective, etc.).
+// ============================================================================
+
 #include "camera.h"
 
 #include <cmath>

@@ -1,3 +1,12 @@
+// ============================================================================
+// textrendering.cpp - Renderização de texto na tela (overlay 2D)
+//
+// Fornecido pelo código base da disciplina. Responsável por inicializar um
+// programa de GPU próprio e uma textura com a fonte DejaVu (dejavufont.h)
+// para desenhar strings sobre a cena (ex.: FPS, informações de debug),
+// além de utilitários para imprimir matrizes e vetores na tela.
+// ============================================================================
+
 // Based on http://hamelot.io/visualization/opengl-text-without-any-external-libraries/
 //   and on https://github.com/rougier/freetype-gl
 #include <string>
