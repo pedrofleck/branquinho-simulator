@@ -42,7 +42,7 @@ void Bus::OnKey(int key, int action){
     } else if (key == GLFW_KEY_D){
         keyD = isPressed;
     }
-    
+
     // printf("Bus::OnKey %d %d\n", key, action);
 }
 
