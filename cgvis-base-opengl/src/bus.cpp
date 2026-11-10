@@ -29,30 +29,44 @@ Bus::Bus(){
 
 // TODO: fix holding key bug
 void Bus::OnKey(int key, int action){
-    if (key == GLFW_KEY_W && action == GLFW_PRESS){
-        speed = 1;
-    } else if (key == GLFW_KEY_S && action == GLFW_PRESS){
-        speed = -1;
-    } else if (key == GLFW_KEY_A && action == GLFW_PRESS){
-        turn = 1;
-    } else if (key == GLFW_KEY_D && action == GLFW_PRESS){
-        turn = -1;
-    } else {
-        speed = 0;
-        turn = 0;
+    bool isPressed;
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) isPressed = true;
+    else if (action == GLFW_RELEASE) isPressed = false;
+
+    if (key == GLFW_KEY_W){
+        keyW = isPressed;
+    } else if (key == GLFW_KEY_S){
+        keyS = isPressed;
+    } else if (key == GLFW_KEY_A){
+        keyA = isPressed;
+    } else if (key == GLFW_KEY_D){
+        keyD = isPressed;
     }
+    // printf("Bus::OnKey %d %d\n", key, action);
 }
 
 void Bus::UpdatePos(double deltaT){
-    position.x -= speed * sin(yaw) * deltaT;
-    position.z -= speed * cos(yaw) * deltaT;
-    if (speed != 0) yaw += turn * deltaT;
+    // Calculate speed
+    if (keyW)       speed = -1.0f;
+    else if (keyS)  speed = 1.0f;
+    else            speed = 0.0f;
+
+    // Calculate yaw angle
+    int turn = keyA - keyD;
+
+    // Update position
+    position.x += speed * sin(yaw) * deltaT;
+    position.z += speed * cos(yaw) * deltaT;
+
+    // Update angle (only while moving, invert if reversing)
+    if (speed != 0) yaw += turn * deltaT * -speed;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
     return Matrix_Translate(position.x, position.y, position.z)
          * Matrix_Rotate_Y(yaw)
+         * Matrix_Translate(0.0f, 0.0f, -1.0f)
          * Matrix_Rotate_X(-3.14159265f / 2.0f)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }

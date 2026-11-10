@@ -12,11 +12,17 @@ class Bus
 public:
     Bus();
 
-    int turn;
+    // Data
     float yaw;
     float speed;
     glm::vec4 position;
     glm::vec3 scale;
+
+    // Keys
+    bool keyW;
+    bool keyA;
+    bool keyS;
+    bool keyD;
 
     // Atualiza a posição do ônibus
     void UpdatePos(const double deltaT);
