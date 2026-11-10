@@ -4,10 +4,10 @@
 // Responsável pelo estado do veículo na cena (posição, escala e, futuramente,
 // orientação/velocidade) e pela composição da sua matriz Model:
 //
-//     M_bus = Translate(pos) * Rotate_Y(yaw) * Rotate_X(-pi/2) * Scale(s)
+//     M_bus = Translate(pos) * Rotate_Y(yaw) * Scale(s)
 //
-// onde Rotate_X(-pi/2) converte o modelo exportado do Blender (Z-up) para a
-// convenção Y-up da cena. Também desenha todas as shapes do ObjModel do ônibus
+// Modelo exportado do Blender em .obj usando Z forward e Y up
+// Também desenha todas as shapes do ObjModel do ônibus
 // enviando a matriz Model e o object_id BUS para os shaders.
 //
 // Todas as transformações usam exclusivamente as funções de "matrices.h".
@@ -42,13 +42,14 @@ void Bus::OnKey(int key, int action){
     } else if (key == GLFW_KEY_D){
         keyD = isPressed;
     }
+    
     // printf("Bus::OnKey %d %d\n", key, action);
 }
 
 void Bus::UpdatePos(double deltaT){
     // Calculate speed
-    if (keyW)       speed = -1.0f;
-    else if (keyS)  speed = 1.0f;
+    if (keyW)       speed = 1.0f;
+    else if (keyS)  speed = -1.0f;
     else            speed = 0.0f;
 
     // Calculate yaw angle
@@ -59,15 +60,15 @@ void Bus::UpdatePos(double deltaT){
     position.z += speed * cos(yaw) * deltaT;
 
     // Update angle (only while moving, invert if reversing)
-    if (speed != 0) yaw += turn * deltaT * -speed;
+    if (speed != 0) yaw += turn * deltaT * speed;
+
+    // PrintVector(position);
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
     return Matrix_Translate(position.x, position.y, position.z)
          * Matrix_Rotate_Y(yaw)
-         * Matrix_Translate(0.0f, 0.0f, -1.0f)
-         * Matrix_Rotate_X(-3.14159265f / 2.0f)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }
 
