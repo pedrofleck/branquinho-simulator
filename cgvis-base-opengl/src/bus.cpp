@@ -21,16 +21,38 @@
 
 Bus g_Bus;
 
-Bus::Bus()
-    : position(glm::vec4(0.0f, -0.4f, 0.0f, 1.0f))
-    , scale(glm::vec3(0.25f, 0.25f, 0.25f))
-{
+Bus::Bus(){
+    position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    scale = glm::vec3(0.25f, 0.25f, 0.25f);
+    yaw = 0;
+}
+
+// TODO: fix holding key bug
+void Bus::OnKey(int key, int action){
+    if (key == GLFW_KEY_W && action == GLFW_PRESS){
+        speed = 1;
+    } else if (key == GLFW_KEY_S && action == GLFW_PRESS){
+        speed = -1;
+    } else if (key == GLFW_KEY_A && action == GLFW_PRESS){
+        turn = 1;
+    } else if (key == GLFW_KEY_D && action == GLFW_PRESS){
+        turn = -1;
+    } else {
+        speed = 0;
+        turn = 0;
+    }
+}
+
+void Bus::UpdatePos(double deltaT){
+    position.x -= speed * sin(yaw) * deltaT;
+    position.z -= speed * cos(yaw) * deltaT;
+    if (speed != 0) yaw += turn * deltaT;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
     return Matrix_Translate(position.x, position.y, position.z)
-         * Matrix_Rotate_Y((float)glfwGetTime())
+         * Matrix_Rotate_Y(yaw)
          * Matrix_Rotate_X(-3.14159265f / 2.0f)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }

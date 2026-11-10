@@ -107,6 +107,8 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
+    double prevTime = 0.0;
+
     while (!glfwWindowShouldClose(window))
     {
         glm::vec3 sky_color = g_Lighting.GetSkyColor();
@@ -125,11 +127,18 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-        // Renderiza o ônibus girando continuamente
+        // Delta T
+        double curTime = glfwGetTime();
+        double deltaT = curTime - prevTime;
+        prevTime = curTime;
+
+        // Renderiza o ônibus
+        g_Bus.UpdatePos(deltaT);
         g_Bus.Draw(branquinhomodel);
 
         // Renderiza o plano do chão
-        glm::mat4 model = Matrix_Translate(0.0f, -1.1f, 0.0f);
+        glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f)
+                        * Matrix_Scale(10.0f, 10.0f, 10.0f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("the_plane");
@@ -172,6 +181,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     Correcao_KeyCallback(key, action, mod);
 
     g_Lighting.OnKey(key, action);
+    g_Bus.OnKey(key, action);
 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);

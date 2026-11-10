@@ -12,8 +12,15 @@ class Bus
 public:
     Bus();
 
+    int turn;
+    float yaw;
+    float speed;
     glm::vec4 position;
     glm::vec3 scale;
+
+    // Atualiza a posição do ônibus
+    void UpdatePos(const double deltaT);
+    void OnKey(int key, int action);
 
     // Retorna a matriz Model computada via matrices.h
     glm::mat4 GetModelMatrix() const;
