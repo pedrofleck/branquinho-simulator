@@ -20,8 +20,4 @@ PROMPT: Remova todo o código legado e não utilizado de main.cpp (modelos antig
 
 PROMPT: Crie um módulo de iluminação (lighting.h e lighting.cpp) com suporte à posição do Sol (hora do dia), cor ambiente e névoa exponencial, e atualize o fragment shader com iluminação difusa e especular (Blinn-Phong com Fresnel).
 
----
 
-# Sistema de iluminação solar, hora do dia e névoa
-
-PROMPT: Crie um módulo de iluminação (lighting.h e lighting.cpp) com suporte à posição do Sol (hora do dia), cor ambiente e névoa exponencial, e atualize o fragment shader com iluminação difusa e especular (Blinn-Phong com Fresnel).

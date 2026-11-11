@@ -6,16 +6,21 @@
 # Arquivos fonte C/C++. Inclua nesta lista todos os arquivos que devem
 # ser compilados.
 set(SOURCES
-  src/main.cpp
-  src/scene.cpp
-  src/camera.cpp
-  src/bus.cpp
-  src/lighting.cpp
-  src/correcao.cpp
-  src/textrendering.cpp
-  src/tiny_obj_loader.cpp
-  src/stb_image.cpp
-  src/glad.c
+  # Módulos principais da aplicação
+  src/main.cpp          # Ponto de entrada, loop principal (game loop) e callbacks GLFW
+  src/scene.cpp         # Gerenciamento de malhas OBJ, VAOs/VBOs, texturas e shaders
+  src/camera.cpp        # Câmera orbital (Look-At) e cálculo das matrizes View e Projection
+  src/bus.cpp           # Entidade do ônibus Mascarello Gran Midi e composição da matriz Model
+  src/lighting.cpp      # Dinâmica de iluminação solar (hora do dia), céu e névoa exponencial
+
+  # Infraestrutura da disciplina e utilitários
+  src/correcao.cpp      # Callback mandatório para testes automatizados da disciplina (não alterar)
+  src/textrendering.cpp # Renderização de texto e métricas de desempenho (FPS) no HUD
+
+  # Bibliotecas auxiliares de terceiros (Third-party)
+  src/tiny_obj_loader.cpp # Parser de arquivos de geometria 3D (.obj) e materiais (.mtl)
+  src/stb_image.cpp       # Carregamento e descompressão de arquivos de imagem de textura
+  src/glad.c              # Loader de ponteiros de funções da API OpenGL 3.3 Core Profile
 )
 
 cmake_minimum_required(VERSION 3.10)
