@@ -174,21 +174,23 @@ int main(int argc, char* argv[])
 
         // Atualizamos os parâmetros dinâmicos de luz solar, céu e névoa no shader
         g_Lighting.ApplyUniforms(g_GpuProgramID);
-
-        // Computamos as matrizes View e Projection através do módulo Camera
-        glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus.position);
-        glm::mat4 projection = g_Camera.ComputeProjectionMatrix();
-
-        glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
-
+        
         // Atualização da cinemática baseada no tempo decorrido (Delta T)
         double curTime = glfwGetTime();
         double deltaT = curTime - prevTime;
         prevTime = curTime;
 
-        // Atualiza a física/cinemática do ônibus e o renderiza na cena
+        // Atualiza a física/cinemática do ônibus
         g_Bus.UpdatePos(deltaT);
+        
+        // Computamos as matrizes View e Projection através do módulo Camera
+        glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus);
+        glm::mat4 projection = g_Camera.ComputeProjectionMatrix();
+        
+        glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
+        
+        // Renderiza ônibus depois de atualizar a câmera
         g_Bus.Draw(branquinhomodel);
 
         // Renderiza o terreno de teste
