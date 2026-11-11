@@ -32,6 +32,9 @@
 #include "bus.h"
 #include "lighting.h"
 
+// Variáveis de controle de execução
+bool g_VsyncEnabled = true; // Sincronização vertical (V-Sync) ativa por padrão
+
 // ----------------------------------------------------------------------------
 // Declarações de Funções Auxiliares de Renderização de Texto (textrendering.cpp)
 // ----------------------------------------------------------------------------
@@ -95,6 +98,9 @@ int main(int argc, char* argv[])
 
     // Carregamos todos os ponteiros de funções OpenGL 3.3 via GLAD
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+
+    // Configuração inicial do V-Sync (1 = ativado limitando à taxa do monitor, 0 = desativado)
+    glfwSwapInterval(g_VsyncEnabled ? 1 : 0);
 
     // Registramos e forçamos a chamada do callback de redimensionamento para definir a proporção inicial da tela
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
@@ -245,6 +251,14 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Encaminha teclas de movimentação (W, A, S, D) para o controle do ônibus
     g_Bus.OnKey(key, action);
 
+    // Tecla V alterna V-Sync (Sincronização Vertical com o monitor)
+    if (key == GLFW_KEY_V && action == GLFW_PRESS)
+    {
+        g_VsyncEnabled = !g_VsyncEnabled;
+        glfwSwapInterval(g_VsyncEnabled ? 1 : 0);
+        printf("V-Sync: %s\n", g_VsyncEnabled ? "ATIVADO" : "DESATIVADO");
+    }
+
     // ESC fecha a janela da aplicação
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
@@ -278,8 +292,9 @@ void TextRendering_ShowFramesPerSecond(GLFWwindow* window)
 {
     static float old_seconds = (float)glfwGetTime();
     static int   ellapsed_frames = 0;
-    static char  buffer[20] = "?? fps";
-    static int   numchars = 7;
+    static float current_fps = 0.0f;
+    static char  buffer[50] = "?? fps [VSync ON]";
+    static int   numchars = 17;
 
     ellapsed_frames += 1;
 
@@ -289,10 +304,12 @@ void TextRendering_ShowFramesPerSecond(GLFWwindow* window)
     // Atualiza a medição de FPS uma vez a cada segundo
     if (ellapsed_seconds > 1.0f)
     {
-        numchars = snprintf(buffer, 20, "%.2f fps", ellapsed_frames / ellapsed_seconds);
+        current_fps = ellapsed_frames / ellapsed_seconds;
         old_seconds = seconds;
         ellapsed_frames = 0;
     }
+
+    numchars = snprintf(buffer, sizeof(buffer), "%.1f fps [VSync %s]", current_fps, g_VsyncEnabled ? "ON" : "OFF");
 
     float lineheight = TextRendering_LineHeight(window);
     float charwidth = TextRendering_CharWidth(window);

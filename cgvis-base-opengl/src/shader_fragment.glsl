@@ -155,7 +155,7 @@ void main()
 
         Kd0 = vec3(0.95, 0.95, 0.95); // placeholder de "textura" branca
         // Kd0 = texture(TextureImage0, vec2(U, V)).rgb; // antiga textura de tijolos
-        Ks  = vec3(0.35, 0.35, 0.35); // Lataria do ônibus possui reflexo especular nítido
+        Ks  = vec3(0.50, 0.50, 0.50); // Lataria do ônibus possui reflexo especular nítido
         q   = 64.0;                    // Destaque especular concentrado
     }
     else if ( object_id == PLANE )

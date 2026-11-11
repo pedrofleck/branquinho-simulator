@@ -20,4 +20,14 @@ PROMPT: Remova todo o código legado e não utilizado de main.cpp (modelos antig
 
 PROMPT: Crie um módulo de iluminação (lighting.h e lighting.cpp) com suporte à posição do Sol (hora do dia), cor ambiente e névoa exponencial, e atualize o fragment shader com iluminação difusa e especular (Blinn-Phong com Fresnel).
 
+---
 
+# Correção e integração de main.cpp
+
+PROMPT: Resolva os marcadores de conflito de merge em main.cpp, integrando o carregamento do terreno de teste, cinemática com Delta T e os controles de iluminação e movimentação.
+
+---
+
+# Implementação de V-Sync e indicador no HUD
+
+PROMPT: Implemente o controle de sincronização vertical (V-Sync) via GLFW com tecla de atalho V para alternar e atualize o HUD para exibir o status do V-Sync junto ao FPS.
