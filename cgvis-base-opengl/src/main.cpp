@@ -134,6 +134,14 @@ int main(int argc, char* argv[])
     ComputeNormals(&branquinhomodel);
     BuildTrianglesAndAddToVirtualScene(&branquinhomodel);
 
+    // Carregamos o modelo do poste de iluminação (lightpole.obj)
+    ObjModel lightpolemodel("../../../data/lightpole.obj");
+    ComputeNormals(&lightpolemodel);
+    BuildTrianglesAndAddToVirtualScene(&lightpolemodel);
+
+    // Registra um poste de luz posicionado no chão ao lado do ônibus com braço voltado para a pista (+90 graus)
+    g_Lighting.AddStreetLamp(glm::vec3(-3.2f, 0.0f, -2.0f), 3.14159265f / 2.0f);
+
     // Inicializamos o subsistema de rasterização de fontes para o HUD
     TextRendering_Init();
 
@@ -188,6 +196,9 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("terrain");
+
+        // Renderiza todos os postes de iluminação e suas lâmpadas superiores
+        g_Lighting.DrawLightPoles();
 
         // Exibimos a taxa de quadros por segundo no canto superior da tela
         TextRendering_ShowFramesPerSecond(window);

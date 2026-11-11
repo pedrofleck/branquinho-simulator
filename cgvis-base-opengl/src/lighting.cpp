@@ -15,11 +15,14 @@
 #include "lighting.h"
 
 #include <cmath>
+#include <cstdio>
+#include <string>
 #include <algorithm>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "matrices.h"
+#include "scene.h"
 
 // Instância global declarada em lighting.h
 Lighting g_Lighting;
@@ -155,4 +158,76 @@ void Lighting::ApplyUniforms(GLuint gpu_program_id) const
     glUniform3fv(glGetUniformLocation(gpu_program_id, "ambient_color"), 1, glm::value_ptr(amb_col));
     glUniform3fv(glGetUniformLocation(gpu_program_id, "fog_color"),     1, glm::value_ptr(fog_col));
     glUniform1f(glGetUniformLocation(gpu_program_id,  "fog_density"),   fog_density);
+
+    // Envia as fontes de luz pontuais/direcionadas (ex.: postes de luz)
+    int count = std::min((int)point_lights.size(), 8);
+    glUniform1i(glGetUniformLocation(gpu_program_id, "num_point_lights"), count);
+
+    for (int i = 0; i < count; ++i)
+    {
+        std::string prefix = "point_lights[" + std::to_string(i) + "].";
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "position").c_str()),   1, glm::value_ptr(point_lights[i].position));
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "direction").c_str()),  1, glm::value_ptr(point_lights[i].direction));
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "color").c_str()),      1, glm::value_ptr(point_lights[i].color));
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "intensity").c_str()),        point_lights[i].intensity);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "constant").c_str()),         point_lights[i].constant);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "linear").c_str()),           point_lights[i].linear);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "quadratic").c_str()),        point_lights[i].quadratic);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "inner_cutoff_cos").c_str()), point_lights[i].inner_cutoff_cos);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "outer_cutoff_cos").c_str()), point_lights[i].outer_cutoff_cos);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// AddStreetLamp()
+// Posiciona um poste (lightpole.obj) com a base tocando ground_position,
+// armazena sua matriz Model para renderização e cria automaticamente o ponto
+// de luz direcionado para baixo na posição exata da lâmpada superior.
+// ----------------------------------------------------------------------------
+void Lighting::AddStreetLamp(glm::vec3 ground_position, float rotation_y, float scale)
+{
+    // No modelo lightpole.obj, a base inferior fica em y = -1.682417 no espaço local.
+    // Compensamos esse deslocamento para que a base toque exatamente ground_position.y.
+    float base_offset_y = 1.682417f * scale;
+
+    glm::mat4 model_pole = Matrix_Translate(ground_position.x, ground_position.y + base_offset_y, ground_position.z)
+                         * Matrix_Rotate_Y(rotation_y)
+                         * Matrix_Scale(scale, scale, scale);
+
+    light_pole_matrices.push_back(model_pole);
+
+    // Coordenada local da lâmpada superior (light_Cube.001) no arquivo lightpole.obj
+    glm::vec4 lamp_world_pos = model_pole * glm::vec4(0.03f, 11.90f, 3.71f, 1.0f);
+
+    PointLight lamp;
+    lamp.position         = glm::vec3(lamp_world_pos.x, lamp_world_pos.y, lamp_world_pos.z);
+    lamp.direction        = glm::vec3(0.0f, -1.0f, 0.0f); // Aponta para baixo (zero luz para cima)
+    lamp.color            = glm::vec3(1.0f, 1.0f, 1.0f);  // Multiplicador neutro (ajustável em tempo real no shader)
+    lamp.intensity        = 1.0f;                         // Multiplicador neutro (ajustável em tempo real no shader)
+    lamp.constant         = 1.0f;
+    lamp.linear           = 0.07f;
+    lamp.quadratic        = 0.017f;
+    lamp.inner_cutoff_cos = 0.45f;
+    lamp.outer_cutoff_cos = 0.05f;
+
+    point_lights.push_back(lamp);
+}
+
+// ----------------------------------------------------------------------------
+// DrawLightPoles()
+// Renderiza a estrutura metálica (pole_Cube) e o bulbo luminoso (light_Cube.001)
+// de todos os postes cadastrados na cena.
+// ----------------------------------------------------------------------------
+void Lighting::DrawLightPoles() const
+{
+    for (size_t i = 0; i < light_pole_matrices.size(); ++i)
+    {
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(light_pole_matrices[i]));
+
+        glUniform1i(g_object_id_uniform, LIGHTPOLE);
+        DrawVirtualObject("pole_Cube");
+
+        glUniform1i(g_object_id_uniform, LIGHTBULB);
+        DrawVirtualObject("light_Cube.001");
+    }
 }

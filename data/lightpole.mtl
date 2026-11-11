@@ -1,0 +1,8 @@
+# Blender MTL File: 'lightpole.mtl'
+newmtl Material
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.300000 0.300000 0.320000
+Ks 0.500000 0.500000 0.500000
+d 1.000000
+illum 2

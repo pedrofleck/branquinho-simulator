@@ -31,3 +31,15 @@ PROMPT: Resolva os marcadores de conflito de merge em main.cpp, integrando o car
 # Implementação de V-Sync e indicador no HUD
 
 PROMPT: Implemente o controle de sincronização vertical (V-Sync) via GLFW com tecla de atalho V para alternar e atualize o HUD para exibir o status do V-Sync junto ao FPS.
+
+---
+
+# Adição do modelo de poste de luz com ponto de luz direcionado
+
+PROMPT: Carregue e renderize o modelo lightpole.obj na cena com um ponto de luz posicionado no topo apontando para baixo (sem emissão de luz para cima) no sistema de iluminação e no fragment shader.
+
+---
+
+# Centralização dos postes no módulo de iluminação e painel de ajuste em tempo real no shader
+
+PROMPT: Separe cor e intensidade na estrutura PointLight, mova a criação e renderização dos postes de luz para a classe Lighting e adicione constantes de ajuste em tempo real no topo de shader_fragment.glsl para recarregamento via tecla R.

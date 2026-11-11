@@ -14,9 +14,27 @@
 #ifndef _LIGHTING_H
 #define _LIGHTING_H
 
+#include <vector>
 #include <glad/glad.h>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <glm/mat4x4.hpp>
+
+// ----------------------------------------------------------------------------
+// Estrutura para fontes de luz locais direcionadas (Postes de Luz e Faróis)
+// ----------------------------------------------------------------------------
+struct PointLight
+{
+    glm::vec3 position;         // Posição da fonte de luz no espaço do mundo (XYZ)
+    glm::vec3 direction;        // Direção principal do feixe (ex.: (0, -1, 0) apontando para baixo)
+    glm::vec3 color;            // Cor pura RGB da lâmpada (valores normalizados de 0.0 a 1.0)
+    float     intensity;        // Potência/intensidade multiplicadora do brilho da luz
+    float     constant;         // Atenuação constante (kc = 1.0)
+    float     linear;           // Atenuação linear (kl)
+    float     quadratic;        // Atenuação quadrática (kq)
+    float     inner_cutoff_cos; // Cosseno do ângulo interno do cone (iluminação plena)
+    float     outer_cutoff_cos; // Cosseno do ângulo externo de corte (0 luz acima/fora dele)
+};
 
 class Lighting
 {
@@ -26,6 +44,12 @@ public:
     // ------------------------------------------------------------------------
     // Parâmetros de Estado
     // ------------------------------------------------------------------------
+
+    // Lista de luzes pontuais/direcionadas presentes na cena (ex.: postes de luz)
+    std::vector<PointLight> point_lights;
+
+    // Lista de matrizes Model dos postes de iluminação posicionados no mapa
+    std::vector<glm::mat4> light_pole_matrices;
 
     // Ângulo de elevação do Sol no plano vertical em radianos:
     //   - sun_angle = 0.0          -> Alvorada / Nascer do Sol (horizonte leste)
@@ -74,6 +98,13 @@ public:
     // Localiza e envia todos os uniforms de luz e névoa para o programa de shaders
     // ativo na GPU (sun_direction, sun_color, ambient_color, fog_color, fog_density).
     void ApplyUniforms(GLuint gpu_program_id) const;
+
+    // Adiciona um poste de luz (lightpole.obj) na posição de chão especificada (X, Y, Z),
+    // calculando sua matriz Model e registrando automaticamente o ponto de luz no topo.
+    void AddStreetLamp(glm::vec3 ground_position, float rotation_y = 0.0f, float scale = 0.5f);
+
+    // Renderiza todos os postes de luz e seus bulbos luminosos registrados na cena.
+    void DrawLightPoles() const;
 };
 
 // Instância global do sistema de iluminação
