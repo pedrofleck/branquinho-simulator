@@ -4,6 +4,8 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+class Bus;  // declaração antecipada
+
 // Classe que encapsula a câmera Look-At em coordenadas esféricas e projeções
 class Camera
 {
@@ -21,6 +23,9 @@ public:
     float nearplane;
     float farplane;
     float fov;
+    enum CameraMode { Orbit, Bumper };
+    CameraMode mode;
+    glm::vec4 bumper_offset_local;
 
     // Estado do mouse para controle da órbita
     bool   left_button_pressed;
@@ -32,9 +37,10 @@ public:
     void OnMouseButton(int button, int action, int mods, double xpos, double ypos);
     void OnScroll(double xoffset, double yoffset);
     void SetScreenRatio(int width, int height);
+    void ToggleCameraMode();
 
     // Métodos de cálculo de matrizes usando matrices.h
-    glm::mat4 ComputeViewMatrix(glm::vec4 lookat_point = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)) const;
+    glm::mat4 ComputeViewMatrix(const Bus& bus) const;
     glm::mat4 ComputeProjectionMatrix() const;
 };
 

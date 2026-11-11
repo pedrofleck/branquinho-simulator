@@ -22,28 +22,33 @@
 #include <algorithm>
 #include <GLFW/glfw3.h>
 
+#include "bus.h"
 #include "matrices.h"
 
 // Instância global
 Camera g_Camera;
 
-Camera::Camera()
-    : theta(0.0f)
-    , phi(0.35f)
-    , distance(6.0f)
-    , use_perspective(true)
-    , screen_ratio(1.0f)
-    , nearplane(-0.1f)
-    , farplane(-200.0f)
-    , fov(3.141592f / 3.0f)
-    , left_button_pressed(false)
-    , last_cursor_x(0.0)
-    , last_cursor_y(0.0)
-{
+Camera::Camera(){
+    theta = 0.0f;
+    phi = 0.35f;
+    distance = 6.0f;
+    use_perspective = true;
+    screen_ratio = 1.0f;
+    nearplane = -0.1f;
+    farplane = -200.0f;
+    fov = 3.141592f / 3.0f;
+    left_button_pressed = false;
+    last_cursor_x = 0.0;
+    last_cursor_y = 0.0;
+    mode = Orbit;
+    bumper_offset_local = glm::vec4(0.0f, 0.7f, -8.3f, 1.0f);
 }
 
 void Camera::OnCursorPos(double xpos, double ypos)
 {
+    // Só executa se câmera estiver em Orbit
+    if (mode == Bumper) return;
+
     if (left_button_pressed)
     {
         float dx = (float)(xpos - last_cursor_x);
@@ -86,6 +91,9 @@ void Camera::OnMouseButton(int button, int action, int mods, double xpos, double
 
 void Camera::OnScroll(double xoffset, double yoffset)
 {
+    // Só executa se câmera estiver em Orbit
+    if (mode == Bumper) return;
+
     distance -= 0.1f * (float)yoffset;
 
     const float verysmallnumber = std::numeric_limits<float>::epsilon();
@@ -98,20 +106,36 @@ void Camera::SetScreenRatio(int width, int height)
     screen_ratio = (float)width / (float)height;
 }
 
-glm::mat4 Camera::ComputeViewMatrix(glm::vec4 lookat_point) const
+glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
 {
-    float r = distance;
-    float y = r * std::sin(phi);
-    float z = r * std::cos(phi) * std::cos(theta);
-    float x = r * std::cos(phi) * std::sin(theta);
+    float r, x, y, z;
+    glm::vec4 camera_position_c;
+    glm::vec4 camera_view_vector;
+    glm::vec4 camera_up_vector;
 
-    glm::vec4 camera_position_c  = lookat_point + glm::vec4(x, y, z, 0.0f);
-    camera_position_c.w = 1.0f;
-    glm::vec4 camera_lookat_l    = lookat_point;
-    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
-    glm::vec4 camera_up_vector   = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    if (mode == Orbit){
+        r = distance;
+        y = r * std::sin(phi);
+        z = r * std::cos(phi) * std::cos(theta);
+        x = r * std::cos(phi) * std::sin(theta);
+    
+        camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        camera_position_c  = bus.position + glm::vec4(x, y, z, 0.0f);
+        camera_position_c.w = 1.0f;
+        glm::vec4 camera_lookat_l = bus.position;
+        camera_view_vector = camera_lookat_l - camera_position_c;
+    } else if (mode == Bumper){
+        camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        camera_position_c = bus.GetModelMatrix() * bumper_offset_local;
+        camera_view_vector = Matrix_Rotate_Y(bus.yaw) * bus.forward_local;
+    }
 
     return Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+}
+
+void Camera::ToggleCameraMode(){
+    if (mode == Orbit) mode = Bumper;
+    else mode = Orbit;
 }
 
 glm::mat4 Camera::ComputeProjectionMatrix() const

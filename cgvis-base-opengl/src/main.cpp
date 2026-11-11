@@ -272,6 +272,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         printf("V-Sync: %s\n", g_VsyncEnabled ? "ATIVADO" : "DESATIVADO");
     }
 
+    // Tecla C alterna visão orbit/bumper
+    if (key == GLFW_KEY_C && action == GLFW_PRESS){
+        g_Camera.ToggleCameraMode();
+    }
+
     // ESC fecha a janela da aplicação
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
