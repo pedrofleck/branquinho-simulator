@@ -6,7 +6,7 @@
 //
 //     M_bus = Translate(pos) * Rotate_Y(yaw) * Scale(s)
 //
-// Modelo exportado do Blender em .obj usando Z forward e Y up
+// Modelo exportado do Blender em .obj usando Y up e -Z forward
 // Também desenha todas as shapes do ObjModel do ônibus
 // enviando a matriz Model e o object_id BUS para os shaders.
 //
@@ -57,6 +57,7 @@ void Bus::UpdatePos(double deltaT){
     else            direction = 0.0f;
 
     // Calculate speed
+    // TODO: remove hardcoded magic numbers
     speed += direction * 2.0f * deltaT; // 2.0f = engine power
     float drag = (speed * speed * 0.1f + 0.5f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
 
