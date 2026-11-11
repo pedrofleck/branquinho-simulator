@@ -39,8 +39,10 @@ static glm::vec3 LerpColor(const glm::vec3& a, const glm::vec3& b, float t)
 }
 
 Lighting::Lighting()
-    : sun_angle(1.0f)      // Posição inicial: Sol elevado a ~57 graus do horizonte
-    , fog_density(0.025f)   // Densidade moderada de névoa atmosférica
+    : bus_headlights_active(false)
+    , bus_high_beams_active(false)
+    , sun_angle(1.0f)      // Posição inicial: Sol elevado a ~57 graus do horizonte
+    , fog_density(0.025f)  // Densidade moderada de névoa atmosférica
 {
 }
 
@@ -159,22 +161,183 @@ void Lighting::ApplyUniforms(GLuint gpu_program_id) const
     glUniform3fv(glGetUniformLocation(gpu_program_id, "fog_color"),     1, glm::value_ptr(fog_col));
     glUniform1f(glGetUniformLocation(gpu_program_id,  "fog_density"),   fog_density);
 
-    // Envia as fontes de luz pontuais/direcionadas (ex.: postes de luz)
-    int count = std::min((int)point_lights.size(), 8);
-    glUniform1i(glGetUniformLocation(gpu_program_id, "num_point_lights"), count);
-
-    for (int i = 0; i < count; ++i)
+    // Helper local para enviar uma única estrutura PointLight ao array do shader
+    auto UploadPointLight = [&](int idx, const PointLight& pl)
     {
-        std::string prefix = "point_lights[" + std::to_string(i) + "].";
-        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "position").c_str()),   1, glm::value_ptr(point_lights[i].position));
-        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "direction").c_str()),  1, glm::value_ptr(point_lights[i].direction));
-        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "color").c_str()),      1, glm::value_ptr(point_lights[i].color));
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "intensity").c_str()),        point_lights[i].intensity);
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "constant").c_str()),         point_lights[i].constant);
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "linear").c_str()),           point_lights[i].linear);
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "quadratic").c_str()),        point_lights[i].quadratic);
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "inner_cutoff_cos").c_str()), point_lights[i].inner_cutoff_cos);
-        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "outer_cutoff_cos").c_str()), point_lights[i].outer_cutoff_cos);
+        std::string prefix = "point_lights[" + std::to_string(idx) + "].";
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "position").c_str()),   1, glm::value_ptr(pl.position));
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "direction").c_str()),  1, glm::value_ptr(pl.direction));
+        glUniform3fv(glGetUniformLocation(gpu_program_id, (prefix + "color").c_str()),      1, glm::value_ptr(pl.color));
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "intensity").c_str()),        pl.intensity);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "constant").c_str()),         pl.constant);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "linear").c_str()),           pl.linear);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "quadratic").c_str()),        pl.quadratic);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "inner_cutoff_cos").c_str()), pl.inner_cutoff_cos);
+        glUniform1f(glGetUniformLocation(gpu_program_id,  (prefix + "outer_cutoff_cos").c_str()), pl.outer_cutoff_cos);
+    };
+
+    // Envia as fontes de luz fixas do mapa (postes) + faróis L + faróis separados de Luz Alta (P)
+    int total_sent = 0;
+    for (size_t i = 0; i < point_lights.size() && total_sent < 12; ++i)
+    {
+        UploadPointLight(total_sent++, point_lights[i]);
+    }
+
+    if (bus_headlights_active)
+    {
+        for (int h = 0; h < 2 && total_sent < 12; ++h)
+        {
+            UploadPointLight(total_sent++, bus_headlights[h]);
+        }
+    }
+
+    if (bus_high_beams_active)
+    {
+        for (int h = 0; h < 2 && total_sent < 12; ++h)
+        {
+            UploadPointLight(total_sent++, bus_high_beams[h]);
+        }
+    }
+
+    glUniform1i(glGetUniformLocation(gpu_program_id, "num_point_lights"), total_sent);
+}
+
+// ----------------------------------------------------------------------------
+// UpdateBusHeadlights()
+// Atualiza a posição exata no mundo e os vetores de direção dos faróis
+// frontais do ônibus a partir de sua matriz Model (via matrices.h):
+//   1. Faróis da tecla L (bus_headlights):
+//      - Estágio 1 (1x L): Luz menor do meio (_tex_electric__emissive_ em ±0.96, 1.12),
+//        feixe curto e suave.
+//      - Estágio 2 (2x L): Farol principal maior (_tex_low_beam__emissive_ em ±1.08, 1.07),
+//        facho baixo assimétrico realista (esquerdo contido, direito aberto para a calçada).
+//   2. Farol separado de Luz Alta da tecla P (bus_high_beams):
+//      - Posicionado na lente interna inferior (_tex_high_beam__emissive_ em ±0.90, 1.01),
+//        projeta um feixe elevado (-2 graus), amplo e de longo alcance (somado ao estado atual de L).
+// ----------------------------------------------------------------------------
+void Lighting::UpdateBusHeadlights(const glm::mat4& bus_model_matrix, float bus_yaw, int headlight_state, bool high_beam_active)
+{
+    bus_headlights_active = (headlight_state > 0);
+    bus_high_beams_active = high_beam_active;
+
+    // Vetor frontal base no referencial local do ônibus (apontando para -Z)
+    glm::vec4 forward_base = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+
+    if (headlight_state == 1)
+    {
+        // ====================================================================
+        // ESTÁGIO 1 (1x L): LUZ MENOR DO MEIO (_tex_electric__emissive_ em ±0.96, 1.12)
+        // ====================================================================
+        glm::vec4 left_local_pos  = glm::vec4(-0.96f, 1.12f, -7.95f, 1.0f);
+        glm::vec4 right_local_pos = glm::vec4( 0.96f, 1.12f, -7.95f, 1.0f);
+
+        glm::vec4 left_world_pos  = bus_model_matrix * left_local_pos;
+        glm::vec4 right_world_pos = bus_model_matrix * right_local_pos;
+
+        // Feixe curto e mais inclinado para o chão próximo (-0.18 rad ~ -10.3 graus)
+        glm::vec4 dir = Matrix_Rotate_Y(bus_yaw)
+                      * Matrix_Rotate_X(-0.18f)
+                      * forward_base;
+        dir = dir / norm(dir);
+
+        for (int h = 0; h < 2; ++h)
+        {
+            const glm::vec4& wpos = (h == 0) ? left_world_pos : right_world_pos;
+
+            bus_headlights[h].position         = glm::vec3(wpos.x, wpos.y, wpos.z);
+            bus_headlights[h].direction        = glm::vec3(dir.x, dir.y, dir.z);
+            bus_headlights[h].color            = glm::vec3(1.0f, 0.94f, 0.82f);
+            bus_headlights[h].intensity        = 0.35f; // Luz suave de presença/curto alcance
+            bus_headlights[h].constant         = 1.0f;
+            bus_headlights[h].linear           = 0.090f;
+            bus_headlights[h].quadratic        = 0.032f;
+            bus_headlights[h].inner_cutoff_cos = 0.955f; // ~17 graus
+            bus_headlights[h].outer_cutoff_cos = 0.850f; // ~31.7 graus
+        }
+    }
+    else if (headlight_state == 2)
+    {
+        // ====================================================================
+        // ESTÁGIO 2 (2x L): FAROL PRINCIPAL MAIOR (_tex_low_beam__emissive_ em ±1.08, 1.07)
+        // ====================================================================
+        glm::vec4 left_local_pos  = glm::vec4(-1.08f, 1.07f, -7.95f, 1.0f);
+        glm::vec4 right_local_pos = glm::vec4( 1.08f, 1.07f, -7.95f, 1.0f);
+
+        glm::vec4 left_world_pos  = bus_model_matrix * left_local_pos;
+        glm::vec4 right_world_pos = bus_model_matrix * right_local_pos;
+
+        // Direção do Farol Esquerdo: pitch de -0.14 rad (~-8 graus) e yaw levemente convergente
+        glm::vec4 left_dir = Matrix_Rotate_Y(bus_yaw - 0.015f)
+                           * Matrix_Rotate_X(-0.14f)
+                           * forward_base;
+        left_dir = left_dir / norm(left_dir);
+
+        // Direção do Farol Direito: pitch de -0.105 rad (~-6 graus) e yaw aberto ~3.5 graus para a calçada (+X)
+        glm::vec4 right_dir = Matrix_Rotate_Y(bus_yaw - 0.06f)
+                            * Matrix_Rotate_X(-0.105f)
+                            * forward_base;
+        right_dir = right_dir / norm(right_dir);
+
+        // Configuração do Farol Esquerdo (0 = Motorista)
+        bus_headlights[0].position         = glm::vec3(left_world_pos.x, left_world_pos.y, left_world_pos.z);
+        bus_headlights[0].direction        = glm::vec3(left_dir.x, left_dir.y, left_dir.z);
+        bus_headlights[0].color            = glm::vec3(1.0f, 1.0f, 1.0f);
+        bus_headlights[0].intensity        = 0.90f;
+        bus_headlights[0].constant         = 1.0f;
+        bus_headlights[0].linear           = 0.045f;
+        bus_headlights[0].quadratic        = 0.0075f;
+        bus_headlights[0].inner_cutoff_cos = 0.945f; // ~19 graus
+        bus_headlights[0].outer_cutoff_cos = 0.820f; // ~35 graus
+
+        // Configuração do Farol Direito (1 = Calçada/Acostamento)
+        bus_headlights[1].position         = glm::vec3(right_world_pos.x, right_world_pos.y, right_world_pos.z);
+        bus_headlights[1].direction        = glm::vec3(right_dir.x, right_dir.y, right_dir.z);
+        bus_headlights[1].color            = glm::vec3(1.0f, 1.0f, 1.0f);
+        bus_headlights[1].intensity        = 1.05f;
+        bus_headlights[1].constant         = 1.0f;
+        bus_headlights[1].linear           = 0.040f;
+        bus_headlights[1].quadratic        = 0.0065f;
+        bus_headlights[1].inner_cutoff_cos = 0.930f; // ~21.5 graus
+        bus_headlights[1].outer_cutoff_cos = 0.780f; // ~38.7 graus
+    }
+
+    if (bus_high_beams_active)
+    {
+        // ====================================================================
+        // LUZ ALTA SEPARADA (Tecla P - Lente interna _tex_high_beam__emissive_ em ±0.90, 1.01)
+        // ====================================================================
+        glm::vec4 left_local_pos  = glm::vec4(-0.90f, 1.01f, -7.95f, 1.0f);
+        glm::vec4 right_local_pos = glm::vec4( 0.90f, 1.01f, -7.95f, 1.0f);
+
+        glm::vec4 left_world_pos  = bus_model_matrix * left_local_pos;
+        glm::vec4 right_world_pos = bus_model_matrix * right_local_pos;
+
+        // Feixe quase horizontal (-0.035 rad ~ -2 graus) projetando longe à frente
+        glm::vec4 left_dir = Matrix_Rotate_Y(bus_yaw + 0.01f)
+                           * Matrix_Rotate_X(-0.035f)
+                           * forward_base;
+        left_dir = left_dir / norm(left_dir);
+
+        glm::vec4 right_dir = Matrix_Rotate_Y(bus_yaw - 0.01f)
+                            * Matrix_Rotate_X(-0.035f)
+                            * forward_base;
+        right_dir = right_dir / norm(right_dir);
+
+        for (int h = 0; h < 2; ++h)
+        {
+            const glm::vec4& wpos = (h == 0) ? left_world_pos : right_world_pos;
+            const glm::vec4& wdir = (h == 0) ? left_dir       : right_dir;
+
+            bus_high_beams[h].position         = glm::vec3(wpos.x, wpos.y, wpos.z);
+            bus_high_beams[h].direction        = glm::vec3(wdir.x, wdir.y, wdir.z);
+            bus_high_beams[h].color            = glm::vec3(1.0f, 1.0f, 1.0f);
+            bus_high_beams[h].intensity        = 1.85f;  // Potência máxima de luz alta
+            bus_high_beams[h].constant         = 1.0f;
+            bus_high_beams[h].linear           = 0.022f; // Longo alcance
+            bus_high_beams[h].quadratic        = 0.0025f;
+            bus_high_beams[h].inner_cutoff_cos = 0.885f; // ~27.7 graus (cone amplo e cheio)
+            bus_high_beams[h].outer_cutoff_cos = 0.700f; // ~45.5 graus
+        }
     }
 }
 

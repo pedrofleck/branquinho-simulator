@@ -16,8 +16,9 @@
 #define BUNNY     1
 #define PLANE     2
 #define BUS       3
-#define LIGHTPOLE 4
-#define LIGHTBULB 5
+#define LIGHTPOLE      4
+#define LIGHTBULB      5
+#define HEADLIGHT_LENS 6
 
 // Estrutura que representa um modelo geométrico carregado a partir de um arquivo .obj
 struct ObjModel

@@ -172,7 +172,18 @@ int main(int argc, char* argv[])
         // Ativamos o programa de GPU que contém nossos shaders
         glUseProgram(g_GpuProgramID);
 
-        // Atualizamos os parâmetros dinâmicos de luz solar, céu e névoa no shader
+        // Atualização da cinemática baseada no tempo decorrido (Delta T)
+        double curTime = glfwGetTime();
+        double deltaT = curTime - prevTime;
+        prevTime = curTime;
+
+        // Atualiza a física/cinemática do ônibus antes de calcular câmera e faróis
+        g_Bus.UpdatePos(deltaT);
+
+        // Atualiza a posição e direção dos faróis frontais conforme o estágio (L) e luz alta separada (P)
+        g_Lighting.UpdateBusHeadlights(g_Bus.GetModelMatrix(), g_Bus.yaw, g_Bus.headlight_state, g_Bus.IsHighBeamActive());
+
+        // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
         g_Lighting.ApplyUniforms(g_GpuProgramID);
         
         // Atualização da cinemática baseada no tempo decorrido (Delta T)
@@ -258,10 +269,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     Correcao_KeyCallback(key, action, mod);
     // ========================================================================
 
-    // Encaminha teclas K e L para o controle da posição do Sol (hora do dia)
+    // Encaminha teclas J e K para o controle da posição do Sol (hora do dia)
     g_Lighting.OnKey(key, action);
 
-    // Encaminha teclas de movimentação (W, A, S, D) para o controle do ônibus
+    // Encaminha teclas de movimentação (W, A, S, D) e faróis (L) para o controle do ônibus
     g_Bus.OnKey(key, action);
 
     // Tecla V alterna V-Sync (Sincronização Vertical com o monitor)
@@ -281,13 +292,9 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
 
-    // Tecla P seleciona Projeção Perspectiva
-    if (key == GLFW_KEY_P && action == GLFW_PRESS)
-        g_Camera.use_perspective = true;
-
-    // Tecla O seleciona Projeção Ortográfica
+    // Tecla O alterna entre Projeção Perspectiva e Projeção Ortográfica (tecla P reservada para Luz Alta)
     if (key == GLFW_KEY_O && action == GLFW_PRESS)
-        g_Camera.use_perspective = false;
+        g_Camera.use_perspective = !g_Camera.use_perspective;
 
     // Tecla R recarrega os arquivos de shader em tempo de execução (Hot-Reload)
     if (key == GLFW_KEY_R && action == GLFW_PRESS)

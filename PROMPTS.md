@@ -43,3 +43,15 @@ PROMPT: Carregue e renderize o modelo lightpole.obj na cena com um ponto de luz 
 # Centralização dos postes no módulo de iluminação e painel de ajuste em tempo real no shader
 
 PROMPT: Separe cor e intensidade na estrutura PointLight, mova a criação e renderização dos postes de luz para a classe Lighting e adicione constantes de ajuste em tempo real no topo de shader_fragment.glsl para recarregamento via tecla R.
+
+---
+
+# Implementação dos faróis frontais assimétricos do ônibus com controle pela tecla L
+
+PROMPT: Implemente os faróis frontais do ônibus vinculados à sua matriz de modelagem e orientação, com ângulos assimétricos realistas entre os lados esquerdo e direito, dispersão periférica no shader e alternância ligada/desligada pela tecla L.
+
+---
+
+# Ciclo de estágios dos faróis frontais (tecla L), lampejo/luz alta (tecla P) e remoção das luzes laterais
+
+PROMPT: Configure o ciclo da tecla L para ligar na primeira vez a luz menor do meio (_tex_electric__emissive_), na segunda vez o farol principal maior (_tex_low_beam__emissive_) e na terceira desligar; configure o farol separado de luz alta (_tex_high_beam__emissive_) para piscar com um toque na tecla P ou travar aceso ao segurar P até que P seja pressionada novamente; e remova a emissão das luzes laterais do ônibus.
