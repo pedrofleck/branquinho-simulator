@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1
 
     // Carregamento das malhas do chão e do ônibus
-    ObjModel planemodel("../../data/plane.obj");
+    ObjModel planemodel("../../../data/terrain.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
@@ -137,11 +137,10 @@ int main(int argc, char* argv[])
         g_Bus.Draw(branquinhomodel);
 
         // Renderiza o plano do chão
-        glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f)
-                        * Matrix_Scale(10.0f, 10.0f, 10.0f);
+        glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
-        DrawVirtualObject("the_plane");
+        DrawVirtualObject("terrain");
 
         TextRendering_ShowFramesPerSecond(window);
 
