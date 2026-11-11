@@ -134,9 +134,9 @@ void Lighting::OnKey(int key, int action)
 {
     if (action == GLFW_PRESS || action == GLFW_REPEAT)
     {
-        if (key == GLFW_KEY_K)
+        if (key == GLFW_KEY_J)
             sun_angle -= 0.08f;
-        if (key == GLFW_KEY_L)
+        if (key == GLFW_KEY_K)
             sun_angle += 0.08f;
     }
 }
