@@ -153,7 +153,8 @@ void main()
         U = texcoords.x;
         V = texcoords.y;
 
-        Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
+        Kd0 = vec3(0.95, 0.95, 0.95); // placeholder de "textura" branca
+        // Kd0 = texture(TextureImage0, vec2(U, V)).rgb; // antiga textura de tijolos
         Ks  = vec3(0.35, 0.35, 0.35); // Lataria do ônibus possui reflexo especular nítido
         q   = 64.0;                    // Destaque especular concentrado
     }

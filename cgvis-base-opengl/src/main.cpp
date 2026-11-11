@@ -1,4 +1,6 @@
 // ============================================================================
+// main.cpp - Ponto de Entrada do Simulador "Branquinho: Rota do Vale"
+//
 // Universidade Federal do Rio Grande do Sul - Instituto de Informática
 // INF01047 Computação Gráfica e Visualização I - Prof. Eduardo Gastal
 //
@@ -10,7 +12,8 @@
 //      - Limpeza do framebuffer com a cor do céu atual;
 //      - Atualização e transmissão das matrizes de projeção e câmera (View);
 //      - Aplicação de iluminação solar dinâmica (hora do dia) e névoa;
-//      - Desenho das entidades da cena virtual (Ônibus e Plano do Chão);
+//      - Atualização da cinemática baseada em Delta T e desenho do ônibus;
+//      - Renderização do terreno da cena virtual;
 //      - Renderização da taxa de quadros por segundo (FPS).
 // ============================================================================
 
@@ -115,13 +118,8 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0 (lataria/tijolos)
     LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (chão)
 
-<<<<<<< HEAD
-    // Carregamos o plano horizontal do chão
-    ObjModel planemodel("../../data/plane.obj");
-=======
-    // Carregamento das malhas do chão e do ônibus
+    // Carregamento das malhas do chão (terreno) e do ônibus Mascarello Gran Midi
     ObjModel planemodel("../../../data/terrain.obj");
->>>>>>> afd04f2b0a0863f309a9d982d4ce9fefac0dec10
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
@@ -145,14 +143,11 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-<<<<<<< HEAD
     // ------------------------------------------------------------------------
     // 4. Loop Principal de Renderização (Game Loop)
     // ------------------------------------------------------------------------
-=======
     double prevTime = 0.0;
 
->>>>>>> afd04f2b0a0863f309a9d982d4ce9fefac0dec10
     while (!glfwWindowShouldClose(window))
     {
         // Limpamos o framebuffer com a cor dinâmica do céu (variando com a hora do dia)
@@ -173,25 +168,17 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-<<<<<<< HEAD
-        // Renderizamos o ônibus na cena
-        g_Bus.Draw(branquinhomodel);
-
-        // Renderizamos o plano do chão com translação vertical para ficar sob o ônibus
-        glm::mat4 model = Matrix_Translate(0.0f, -1.1f, 0.0f);
-=======
-        // Delta T
+        // Atualização da cinemática baseada no tempo decorrido (Delta T)
         double curTime = glfwGetTime();
         double deltaT = curTime - prevTime;
         prevTime = curTime;
 
-        // Renderiza o ônibus
+        // Atualiza a física/cinemática do ônibus e o renderiza na cena
         g_Bus.UpdatePos(deltaT);
         g_Bus.Draw(branquinhomodel);
 
-        // Renderiza o plano do chão
+        // Renderiza o terreno de teste
         glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f);
->>>>>>> afd04f2b0a0863f309a9d982d4ce9fefac0dec10
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("terrain");
@@ -254,6 +241,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
     // Encaminha teclas K e L para o controle da posição do Sol (hora do dia)
     g_Lighting.OnKey(key, action);
+
+    // Encaminha teclas de movimentação (W, A, S, D) para o controle do ônibus
     g_Bus.OnKey(key, action);
 
     // ESC fecha a janela da aplicação
