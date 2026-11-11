@@ -28,6 +28,22 @@ public:
     bool keyS;
     bool keyD;
 
+    // Estado dos faróis frontais:
+    //   headlight_state (tecla L):
+    //     0 = Desligado
+    //     1 = Luz menor do meio (_tex_electric__emissive_)
+    //     2 = Farol principal maior (_tex_low_beam__emissive_)
+    //   Luz alta separada (_tex_high_beam__emissive_, tecla P):
+    //     Pisca ao dar um toque rápido em P; se segurar P, trava acesa até apertar P novamente.
+    int    headlight_state;
+    bool   high_beam_held;
+    bool   high_beam_latched;
+    bool   high_beam_ignore_hold;
+    double high_beam_press_time;
+
+    // Retorna true se o farol separado de luz alta estiver ativo (piscando ou travado aceso)
+    bool IsHighBeamActive() const { return high_beam_held || high_beam_latched; }
+
     // Atualiza a posição do ônibus
     void UpdatePos(const double deltaT);
     void OnKey(int key, int action);

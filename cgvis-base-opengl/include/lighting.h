@@ -51,6 +51,14 @@ public:
     // Lista de matrizes Model dos postes de iluminação posicionados no mapa
     std::vector<glm::mat4> light_pole_matrices;
 
+    // Faróis frontais do ônibus controlados pela tecla L (0 = Esquerdo, 1 = Direito)
+    PointLight bus_headlights[2];
+    bool       bus_headlights_active;
+
+    // Farol separado de Luz Alta controlado pela tecla P (0 = Esquerdo, 1 = Direito)
+    PointLight bus_high_beams[2];
+    bool       bus_high_beams_active;
+
     // Ângulo de elevação do Sol no plano vertical em radianos:
     //   - sun_angle = 0.0          -> Alvorada / Nascer do Sol (horizonte leste)
     //   - sun_angle = PI/2 (~1.57) -> Meio-dia (Sol a pino no zênite)
@@ -91,8 +99,8 @@ public:
     // ------------------------------------------------------------------------
 
     // Processa teclas de atalho para controle dinâmico da hora do dia:
-    //   - Tecla K: retrocede a posição do Sol (movimento horário / amanhecer)
-    //   - Tecla L: avança a posição do Sol (movimento anti-horário / anoitecer)
+    //   - Tecla J: retrocede a posição do Sol (movimento horário / amanhecer)
+    //   - Tecla K: avança a posição do Sol (movimento anti-horário / anoitecer)
     void OnKey(int key, int action);
 
     // Localiza e envia todos os uniforms de luz e névoa para o programa de shaders
@@ -102,6 +110,11 @@ public:
     // Adiciona um poste de luz (lightpole.obj) na posição de chão especificada (X, Y, Z),
     // calculando sua matriz Model e registrando automaticamente o ponto de luz no topo.
     void AddStreetLamp(glm::vec3 ground_position, float rotation_y = 0.0f, float scale = 0.5f);
+
+    // Atualiza a posição e orientação dos faróis frontais do ônibus a cada frame
+    // conforme o estágio da tecla L (0=off, 1=luz menor do meio, 2=farol principal maior)
+    // e o estado do farol separado de Luz Alta (tecla P).
+    void UpdateBusHeadlights(const glm::mat4& bus_model_matrix, float bus_yaw, int headlight_state, bool high_beam_active);
 
     // Renderiza todos os postes de luz e seus bulbos luminosos registrados na cena.
     void DrawLightPoles() const;
