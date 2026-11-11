@@ -124,10 +124,8 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0 (lataria/tijolos)
     LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (chão)
 
-    // Carregamento das malhas do chão (terreno) e do ônibus Mascarello Gran Midi
-    ObjModel planemodel("../../../data/terrain.obj");
-    ComputeNormals(&planemodel);
-    BuildTrianglesAndAddToVirtualScene(&planemodel);
+    // Gera a malha de terreno do Campus do Vale diretamente a partir do mapa topográfico PNG 16-bit
+    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 400.0f, 35.0f, 4, 40.0f);
 
     // Carregamos a malha tridimensional complexa do ônibus Mascarello Gran Midi
     ObjModel branquinhomodel("../../../data/branquinho.obj");
@@ -186,9 +184,6 @@ int main(int argc, char* argv[])
         // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
         g_Lighting.ApplyUniforms(g_GpuProgramID);
 
-        // Atualiza a física/cinemática do ônibus
-        g_Bus.UpdatePos(deltaT);
-        
         // Computamos as matrizes View e Projection através do módulo Camera
         glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus);
         glm::mat4 projection = g_Camera.ComputeProjectionMatrix();

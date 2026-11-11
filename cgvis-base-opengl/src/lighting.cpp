@@ -349,6 +349,9 @@ void Lighting::UpdateBusHeadlights(const glm::mat4& bus_model_matrix, float bus_
 // ----------------------------------------------------------------------------
 void Lighting::AddStreetLamp(glm::vec3 ground_position, float rotation_y, float scale)
 {
+    // Ajusta automaticamente a cota Y para tocar o relevo do terreno em (X, Z)
+    ground_position.y = GetTerrainHeight(ground_position.x, ground_position.z);
+
     // No modelo lightpole.obj, a base inferior fica em y = -1.682417 no espaço local.
     // Compensamos esse deslocamento para que a base toque exatamente ground_position.y.
     float base_offset_y = 1.682417f * scale;

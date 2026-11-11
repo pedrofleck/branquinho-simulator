@@ -36,6 +36,13 @@
 std::map<std::string, SceneObject> g_VirtualScene;
 std::stack<glm::mat4>              g_MatrixStack;
 
+// Dados de altimetria do terreno carregado via PNG 16-bit para consulta de altura O(1) na CPU
+static std::vector<float> g_TerrainHeights;
+static int                g_TerrainGridW      = 0;
+static int                g_TerrainGridH      = 0;
+static float              g_TerrainWorldWidth = 100.0f;
+static float              g_TerrainWorldDepth = 100.0f;
+
 GLuint g_GpuProgramID = 0;
 GLint  g_model_uniform;
 GLint  g_view_uniform;
@@ -360,6 +367,265 @@ void DrawVirtualObject(const char* object_name)
     glBindVertexArray(0);
 }
 
+// ----------------------------------------------------------------------------
+// GetTerrainHeight()
+// Retorna a altura Y do terreno nas coordenadas (world_x, world_z) do mundo
+// usando interpolação bilinear sobre a grade gerada pelo heightmap 16-bit.
+// ----------------------------------------------------------------------------
+float GetTerrainHeight(float world_x, float world_z)
+{
+    if (g_TerrainHeights.empty() || g_TerrainGridW < 2 || g_TerrainGridH < 2)
+        return 0.0f;
+
+    float u = (world_x + 0.5f * g_TerrainWorldWidth) / g_TerrainWorldWidth;
+    float v = (world_z + 0.5f * g_TerrainWorldDepth) / g_TerrainWorldDepth;
+
+    u = std::max(0.0f, std::min(1.0f, u));
+    v = std::max(0.0f, std::min(1.0f, v));
+
+    float fx = u * (float)(g_TerrainGridW - 1);
+    float fz = v * (float)(g_TerrainGridH - 1);
+
+    int x0 = (int)std::floor(fx);
+    int z0 = (int)std::floor(fz);
+    int x1 = std::min(x0 + 1, g_TerrainGridW - 1);
+    int z1 = std::min(z0 + 1, g_TerrainGridH - 1);
+
+    float tx = fx - (float)x0;
+    float tz = fz - (float)z0;
+
+    float h00 = g_TerrainHeights[z0 * g_TerrainGridW + x0];
+    float h10 = g_TerrainHeights[z0 * g_TerrainGridW + x1];
+    float h01 = g_TerrainHeights[z1 * g_TerrainGridW + x0];
+    float h11 = g_TerrainHeights[z1 * g_TerrainGridW + x1];
+
+    float h0 = h00 * (1.0f - tx) + h10 * tx;
+    float h1 = h01 * (1.0f - tx) + h11 * tx;
+
+    return h0 * (1.0f - tz) + h1 * tz;
+}
+
+// ----------------------------------------------------------------------------
+// BuildHeightmapAndAddToVirtualScene()
+// Carrega um mapa topográfico em PNG de 16 bits via stbi_load_16(), gera uma
+// malha indexada com normais analíticas suaves e registra o objeto em g_VirtualScene.
+// ----------------------------------------------------------------------------
+void BuildHeightmapAndAddToVirtualScene(
+    const char* filename,
+    const char* object_name,
+    float world_width,
+    float max_height,
+    int   subsample,
+    float uv_tile
+)
+{
+    printf("Carregando mapa topografico 16-bit \"%s\"... ", filename);
+
+    stbi_set_flip_vertically_on_load(false);
+    int img_w = 0, img_h = 0, channels = 0;
+    unsigned short* raw_pixels = stbi_load_16(filename, &img_w, &img_h, &channels, 1);
+
+    if (raw_pixels == NULL)
+    {
+        fprintf(stderr, "ERROR: Nao foi possivel abrir o heightmap \"%s\".\n", filename);
+        std::exit(EXIT_FAILURE);
+    }
+
+    subsample = std::max(1, subsample);
+    g_TerrainGridW      = (img_w - 1) / subsample + 1;
+    g_TerrainGridH      = (img_h - 1) / subsample + 1;
+    g_TerrainWorldWidth = world_width;
+    g_TerrainWorldDepth = world_width * ((float)img_h / (float)img_w);
+
+    // Encontra o intervalo real [min_raw, max_raw] de 16 bits na imagem para aproveitar toda a faixa dinâmica
+    unsigned short min_raw = 65535;
+    unsigned short max_raw = 0;
+    size_t total_pixels = (size_t)img_w * (size_t)img_h;
+    for (size_t i = 0; i < total_pixels; ++i)
+    {
+        unsigned short v = raw_pixels[i];
+        if (v < min_raw) min_raw = v;
+        if (v > max_raw) max_raw = v;
+    }
+    float raw_range = (max_raw > min_raw) ? (float)(max_raw - min_raw) : 1.0f;
+
+    printf("OK (%dx%d pixels -> malha %dx%d, 16-bit [%u..%u]).\n",
+           img_w, img_h, g_TerrainGridW, g_TerrainGridH, (unsigned)min_raw, (unsigned)max_raw);
+
+    // Amostra a imagem 16-bit com filtro de caixa (box filter) de raio subsample para suavizar o relevo
+    g_TerrainHeights.resize((size_t)g_TerrainGridW * (size_t)g_TerrainGridH);
+    int filter_radius = std::max(1, subsample / 2);
+
+    for (int gz = 0; gz < g_TerrainGridH; ++gz)
+    {
+        int center_pz = std::min(gz * subsample, img_h - 1);
+        for (int gx = 0; gx < g_TerrainGridW; ++gx)
+        {
+            int center_px = std::min(gx * subsample, img_w - 1);
+
+            double sum   = 0.0;
+            int    count = 0;
+            for (int dz = -filter_radius; dz <= filter_radius; ++dz)
+            {
+                int pz = std::max(0, std::min(img_h - 1, center_pz + dz));
+                for (int dx = -filter_radius; dx <= filter_radius; ++dx)
+                {
+                    int px = std::max(0, std::min(img_w - 1, center_px + dx));
+                    sum += (double)raw_pixels[(size_t)pz * (size_t)img_w + (size_t)px];
+                    count++;
+                }
+            }
+
+            float avg_raw    = (float)(sum / (double)count);
+            float normalized = (avg_raw - (float)min_raw) / raw_range;
+            g_TerrainHeights[(size_t)gz * (size_t)g_TerrainGridW + (size_t)gx] = normalized * max_height;
+        }
+    }
+
+    stbi_image_free(raw_pixels);
+
+    // Centraliza verticalmente a origem (0, 0) para que o ponto inicial do ônibus fique em Y = 0.0
+    float origin_height = GetTerrainHeight(0.0f, 0.0f);
+    for (size_t i = 0; i < g_TerrainHeights.size(); ++i)
+    {
+        g_TerrainHeights[i] -= origin_height;
+    }
+
+    // Constrói os buffers de vértices, normais analíticas, coordenadas UV e índices da malha
+    size_t num_vertices = (size_t)g_TerrainGridW * (size_t)g_TerrainGridH;
+    std::vector<float>  model_coefficients;
+    std::vector<float>  normal_coefficients;
+    std::vector<float>  texture_coefficients;
+    std::vector<GLuint> indices;
+
+    model_coefficients.reserve(num_vertices * 4);
+    normal_coefficients.reserve(num_vertices * 4);
+    texture_coefficients.reserve(num_vertices * 2);
+    indices.reserve((size_t)(g_TerrainGridW - 1) * (size_t)(g_TerrainGridH - 1) * 6);
+
+    const float minval = std::numeric_limits<float>::lowest();
+    const float maxval = std::numeric_limits<float>::max();
+    glm::vec3 bbox_min = glm::vec3(maxval, maxval, maxval);
+    glm::vec3 bbox_max = glm::vec3(minval, minval, minval);
+
+    float dx = g_TerrainWorldWidth / (float)(g_TerrainGridW - 1);
+    float dz = g_TerrainWorldDepth / (float)(g_TerrainGridH - 1);
+
+    for (int gz = 0; gz < g_TerrainGridH; ++gz)
+    {
+        float u_z = (float)gz / (float)(g_TerrainGridH - 1);
+        float vz  = (u_z - 0.5f) * g_TerrainWorldDepth;
+
+        for (int gx = 0; gx < g_TerrainGridW; ++gx)
+        {
+            float u_x = (float)gx / (float)(g_TerrainGridW - 1);
+            float vx  = (u_x - 0.5f) * g_TerrainWorldWidth;
+            float vy  = g_TerrainHeights[(size_t)gz * (size_t)g_TerrainGridW + (size_t)gx];
+
+            model_coefficients.push_back(vx);
+            model_coefficients.push_back(vy);
+            model_coefficients.push_back(vz);
+            model_coefficients.push_back(1.0f);
+
+            bbox_min.x = std::min(bbox_min.x, vx);
+            bbox_min.y = std::min(bbox_min.y, vy);
+            bbox_min.z = std::min(bbox_min.z, vz);
+            bbox_max.x = std::max(bbox_max.x, vx);
+            bbox_max.y = std::max(bbox_max.y, vy);
+            bbox_max.z = std::max(bbox_max.z, vz);
+
+            // Cálculo da normal suave por diferenças centrais e produto vetorial de matrices.h
+            int gx_prev = std::max(0, gx - 1);
+            int gx_next = std::min(g_TerrainGridW - 1, gx + 1);
+            int gz_prev = std::max(0, gz - 1);
+            int gz_next = std::min(g_TerrainGridH - 1, gz + 1);
+
+            float hL = g_TerrainHeights[(size_t)gz * (size_t)g_TerrainGridW + (size_t)gx_prev];
+            float hR = g_TerrainHeights[(size_t)gz * (size_t)g_TerrainGridW + (size_t)gx_next];
+            float hU = g_TerrainHeights[(size_t)gz_prev * (size_t)g_TerrainGridW + (size_t)gx];
+            float hD = g_TerrainHeights[(size_t)gz_next * (size_t)g_TerrainGridW + (size_t)gx];
+
+            glm::vec4 tangent_x = glm::vec4((float)(gx_next - gx_prev) * dx, hR - hL, 0.0f, 0.0f);
+            glm::vec4 tangent_z = glm::vec4(0.0f, hD - hU, (float)(gz_next - gz_prev) * dz, 0.0f);
+            glm::vec4 n         = crossproduct(tangent_z, tangent_x);
+            n = n / norm(n);
+
+            normal_coefficients.push_back(n.x);
+            normal_coefficients.push_back(n.y);
+            normal_coefficients.push_back(n.z);
+            normal_coefficients.push_back(0.0f);
+
+            texture_coefficients.push_back(u_x * uv_tile);
+            texture_coefficients.push_back(u_z * uv_tile);
+        }
+    }
+
+    // Gera os 2 triângulos (sentido anti-horário GL_CCW visto de cima +Y) para cada célula da grade
+    for (int gz = 0; gz < g_TerrainGridH - 1; ++gz)
+    {
+        for (int gx = 0; gx < g_TerrainGridW - 1; ++gx)
+        {
+            GLuint v00 = (GLuint)(gz * g_TerrainGridW + gx);
+            GLuint v10 = (GLuint)(gz * g_TerrainGridW + (gx + 1));
+            GLuint v01 = (GLuint)((gz + 1) * g_TerrainGridW + gx);
+            GLuint v11 = (GLuint)((gz + 1) * g_TerrainGridW + (gx + 1));
+
+            indices.push_back(v00);
+            indices.push_back(v01);
+            indices.push_back(v10);
+
+            indices.push_back(v10);
+            indices.push_back(v01);
+            indices.push_back(v11);
+        }
+    }
+
+    GLuint vertex_array_object_id;
+    glGenVertexArrays(1, &vertex_array_object_id);
+    glBindVertexArray(vertex_array_object_id);
+
+    GLuint VBO_model_coefficients_id;
+    glGenBuffers(1, &VBO_model_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_model_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, model_coefficients.size() * sizeof(float), model_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+    GLuint VBO_normal_coefficients_id;
+    glGenBuffers(1, &VBO_normal_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_normal_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, normal_coefficients.size() * sizeof(float), normal_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(1);
+
+    GLuint VBO_texture_coefficients_id;
+    glGenBuffers(1, &VBO_texture_coefficients_id);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id);
+    glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), texture_coefficients.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(2);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    GLuint indices_id;
+    glGenBuffers(1, &indices_id);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_id);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
+
+    SceneObject theobject;
+    theobject.name                   = object_name;
+    theobject.first_index            = 0;
+    theobject.num_indices            = indices.size();
+    theobject.rendering_mode         = GL_TRIANGLES;
+    theobject.vertex_array_object_id = vertex_array_object_id;
+    theobject.bbox_min               = bbox_min;
+    theobject.bbox_max               = bbox_max;
+
+    g_VirtualScene[object_name] = theobject;
+}
+
 void LoadTextureImage(const char* filename)
 {
     printf("Carregando imagem \"%s\"... ", filename);
@@ -383,8 +649,8 @@ void LoadTextureImage(const char* filename)
     glGenTextures(1, &texture_id);
     glGenSamplers(1, &sampler_id);
 
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

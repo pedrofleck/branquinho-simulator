@@ -148,6 +148,9 @@ void Bus::UpdatePos(double deltaT){
 
     // Update position
     position += forward * speed * (float)deltaT;
+    // Código novo para manter o ônibus tocando o relevo do terreno
+    position.y = GetTerrainHeight(position.x, position.z);
+    position.w = 1.0f;
 
     // Update angle (only while moving, invert if reversing)
     yaw += turn * speed * 0.2f * deltaT;

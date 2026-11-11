@@ -52,9 +52,18 @@ extern std::stack<glm::mat4> g_MatrixStack;
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
 
-// Funções de manipulação de malha e cena
+// Funções de manipulação de malha, terreno (heightmap 16-bit) e cena
 void BuildTrianglesAndAddToVirtualScene(ObjModel* model);
 void ComputeNormals(ObjModel* model);
+void BuildHeightmapAndAddToVirtualScene(
+    const char* filename,
+    const char* object_name = "terrain",
+    float world_width  = 400.0f,
+    float max_height   = 35.0f,
+    int   subsample    = 4,
+    float uv_tile      = 40.0f
+);
+float GetTerrainHeight(float world_x, float world_z);
 void DrawVirtualObject(const char* object_name);
 
 // Funções de shaders e GPU

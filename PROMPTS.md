@@ -55,3 +55,9 @@ PROMPT: Implemente os faróis frontais do ônibus vinculados à sua matriz de mo
 # Ciclo de estágios dos faróis frontais (tecla L), lampejo/luz alta (tecla P) e remoção das luzes laterais
 
 PROMPT: Configure o ciclo da tecla L para ligar na primeira vez a luz menor do meio (_tex_electric__emissive_), na segunda vez o farol principal maior (_tex_low_beam__emissive_) e na terceira desligar; configure o farol separado de luz alta (_tex_high_beam__emissive_) para piscar com um toque na tecla P ou travar aceso ao segurar P até que P seja pressionada novamente; e remova a emissão das luzes laterais do ônibus.
+
+---
+
+# Geração de terreno a partir de mapa topográfico PNG 16 bits (vale.png)
+
+PROMPT: Implemente o carregamento direto do mapa topográfico data/vale.png em PNG de 16 bits via stbi_load_16 para gerar a malha do terreno com normais analíticas suaves e consulta de altura bilinear GetTerrainHeight(x, z) para posicionar o ônibus e os postes sobre o relevo.
