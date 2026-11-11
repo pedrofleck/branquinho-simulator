@@ -17,6 +17,8 @@
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/type_ptr.hpp>
+
+#include "scene.h"
 #include "matrices.h"
 
 Bus g_Bus;

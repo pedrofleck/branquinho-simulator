@@ -65,6 +65,7 @@ Por favor, atualize a lista de arquivos fonte no arquivo CMakeLists.txt.")
 endforeach()
 
 add_executable(${EXECUTABLE_NAME} ${SOURCES})
+target_compile_definitions(${EXECUTABLE_NAME} PRIVATE GLFW_INCLUDE_NONE)
 
 target_include_directories(${EXECUTABLE_NAME} BEFORE PRIVATE ${PROJECT_SOURCE_DIR}/include)
 

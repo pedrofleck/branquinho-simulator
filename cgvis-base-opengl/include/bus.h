@@ -4,7 +4,8 @@
 #include <glm/vec4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
-#include "scene.h"
+
+struct ObjModel;    // declaração antecipada no lugar de #include "scene.h"
 
 // Classe que encapsula o estado e a renderização do ônibus
 class Bus
