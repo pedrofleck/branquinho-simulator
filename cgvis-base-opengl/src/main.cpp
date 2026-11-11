@@ -185,11 +185,6 @@ int main(int argc, char* argv[])
 
         // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
         g_Lighting.ApplyUniforms(g_GpuProgramID);
-        
-        // Atualização da cinemática baseada no tempo decorrido (Delta T)
-        double curTime = glfwGetTime();
-        double deltaT = curTime - prevTime;
-        prevTime = curTime;
 
         // Atualiza a física/cinemática do ônibus
         g_Bus.UpdatePos(deltaT);
