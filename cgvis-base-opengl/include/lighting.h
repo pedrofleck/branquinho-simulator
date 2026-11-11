@@ -105,7 +105,7 @@ public:
 
     // Localiza e envia todos os uniforms de luz e névoa para o programa de shaders
     // ativo na GPU (sun_direction, sun_color, ambient_color, fog_color, fog_density).
-    void ApplyUniforms(GLuint gpu_program_id) const;
+    void ApplyUniforms(GLuint gpu_program_id, bool fog_enabled = true) const;
 
     // Adiciona um poste de luz (lightpole.obj) na posição de chão especificada (X, Y, Z),
     // calculando sua matriz Model e registrando automaticamente o ponto de luz no topo.

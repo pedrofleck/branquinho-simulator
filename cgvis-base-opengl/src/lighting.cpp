@@ -148,18 +148,19 @@ void Lighting::OnKey(int key, int action)
 // Transfere o estado de iluminação da CPU para a memória da GPU (Fragment Shader)
 // através de variáveis uniformes declaradas em shader_fragment.glsl.
 // ----------------------------------------------------------------------------
-void Lighting::ApplyUniforms(GLuint gpu_program_id) const
+void Lighting::ApplyUniforms(GLuint gpu_program_id, bool fog_enabled) const
 {
     glm::vec4 sun_dir = GetSunDirection();
     glm::vec3 sun_col = GetSunColor();
     glm::vec3 amb_col = GetAmbientColor();
     glm::vec3 fog_col = GetSkyColor();
+    float effective_fog_density = fog_enabled ? fog_density : 0.0f;
 
     glUniform4fv(glGetUniformLocation(gpu_program_id, "sun_direction"), 1, glm::value_ptr(sun_dir));
     glUniform3fv(glGetUniformLocation(gpu_program_id, "sun_color"),     1, glm::value_ptr(sun_col));
     glUniform3fv(glGetUniformLocation(gpu_program_id, "ambient_color"), 1, glm::value_ptr(amb_col));
     glUniform3fv(glGetUniformLocation(gpu_program_id, "fog_color"),     1, glm::value_ptr(fog_col));
-    glUniform1f(glGetUniformLocation(gpu_program_id,  "fog_density"),   fog_density);
+    glUniform1f(glGetUniformLocation(gpu_program_id,  "fog_density"),   effective_fog_density);
 
     // Helper local para enviar uma única estrutura PointLight ao array do shader
     auto UploadPointLight = [&](int idx, const PointLight& pl)

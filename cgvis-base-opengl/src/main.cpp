@@ -175,14 +175,16 @@ int main(int argc, char* argv[])
         double deltaT = curTime - prevTime;
         prevTime = curTime;
 
-        // Atualiza a física/cinemática do ônibus antes de calcular câmera e faróis
+        // Atualiza a física/cinemática do ônibus e a câmera livre (se ativa) antes de calcular câmera e faróis
         g_Bus.UpdatePos(deltaT);
+        g_Camera.UpdateFreeCamera(deltaT);
 
         // Atualiza a posição e direção dos faróis frontais conforme o estágio (L) e luz alta separada (P)
         g_Lighting.UpdateBusHeadlights(g_Bus.GetModelMatrix(), g_Bus.yaw, g_Bus.headlight_state, g_Bus.IsHighBeamActive());
 
         // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
-        g_Lighting.ApplyUniforms(g_GpuProgramID);
+        // Desativa a névoa automaticamente enquanto estiver no modo de câmera livre (F11)
+        g_Lighting.ApplyUniforms(g_GpuProgramID, g_Camera.mode != Camera::Free);
 
         // Computamos as matrizes View e Projection através do módulo Camera
         glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus);
@@ -262,8 +264,17 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Encaminha teclas J e K para o controle da posição do Sol (hora do dia)
     g_Lighting.OnKey(key, action);
 
-    // Encaminha teclas de movimentação (W, A, S, D) e faróis (L) para o controle do ônibus
-    g_Bus.OnKey(key, action);
+    // No modo de câmera livre, WASD movimenta a câmera; demais teclas (L, P) continuam controlando o ônibus
+    if (g_Camera.mode == Camera::Free &&
+        (key == GLFW_KEY_W || key == GLFW_KEY_A || key == GLFW_KEY_S || key == GLFW_KEY_D))
+    {
+        g_Camera.OnKey(key, action);
+    }
+    else
+    {
+        // Encaminha teclas de movimentação (W, A, S, D) e faróis (L, P) para o controle do ônibus
+        g_Bus.OnKey(key, action);
+    }
 
     // Tecla V alterna V-Sync (Sincronização Vertical com o monitor)
     if (key == GLFW_KEY_V && action == GLFW_PRESS)
@@ -276,6 +287,12 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Tecla C alterna visão orbit/bumper
     if (key == GLFW_KEY_C && action == GLFW_PRESS){
         g_Camera.ToggleCameraMode();
+    }
+
+    // Tecla F11 ativa/desativa a câmera livre para debugar o terreno
+    if (key == GLFW_KEY_F11 && action == GLFW_PRESS){
+        g_Bus.keyW = g_Bus.keyA = g_Bus.keyS = g_Bus.keyD = false;
+        g_Camera.ToggleFreeCamera(g_Bus.position);
     }
 
     // ESC fecha a janela da aplicação

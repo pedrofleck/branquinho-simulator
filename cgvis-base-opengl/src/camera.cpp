@@ -18,6 +18,7 @@
 #include "camera.h"
 
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <algorithm>
 #include <GLFW/glfw3.h>
@@ -35,18 +36,24 @@ Camera::Camera(){
     use_perspective = true;
     screen_ratio = 1.0f;
     nearplane = -0.1f;
-    farplane = -200.0f;
+    farplane = -600.0f;
     fov = 3.141592f / 3.0f;
     left_button_pressed = false;
     last_cursor_x = 0.0;
     last_cursor_y = 0.0;
     mode = Orbit;
+    previous_mode = Orbit;
     bumper_offset_local = glm::vec4(0.0f, 0.7f, -8.3f, 1.0f);
+    free_position = glm::vec4(0.0f, 5.0f, 8.0f, 1.0f);
+    keyW = false;
+    keyA = false;
+    keyS = false;
+    keyD = false;
 }
 
 void Camera::OnCursorPos(double xpos, double ypos)
 {
-    // Só executa se câmera estiver em Orbit
+    // Só executa se câmera estiver em Orbit ou Free
     if (mode == Bumper) return;
 
     if (left_button_pressed)
@@ -57,10 +64,10 @@ void Camera::OnCursorPos(double xpos, double ypos)
         theta -= 0.01f * dx;
         phi   += 0.01f * dy;
 
-        // Limita a elevação para não virar a câmera de cabeça para baixo
-        // e phimin > 0 para não atravessar o plano do chão
+        // No modo Orbit limita phimin > 0 para não atravessar o chão;
+        // no modo Free permite olhar livremente para cima e para baixo
         float phimax = 3.141592f / 2.0f - 0.05f;
-        float phimin = 0.02f;
+        float phimin = (mode == Free) ? -phimax : 0.02f;
 
         if (phi > phimax)
             phi = phimax;
@@ -92,13 +99,52 @@ void Camera::OnMouseButton(int button, int action, int mods, double xpos, double
 void Camera::OnScroll(double xoffset, double yoffset)
 {
     // Só executa se câmera estiver em Orbit
-    if (mode == Bumper) return;
+    if (mode != Orbit) return;
 
     distance -= 0.1f * (float)yoffset;
 
     const float verysmallnumber = std::numeric_limits<float>::epsilon();
     if (distance < verysmallnumber)
         distance = verysmallnumber;
+}
+
+// Trecho da câmera livre
+void Camera::OnKey(int key, int action)
+{
+    bool isPressed = (action == GLFW_PRESS || action == GLFW_REPEAT);
+
+    if (key == GLFW_KEY_W)      keyW = isPressed;
+    else if (key == GLFW_KEY_S) keyS = isPressed;
+    else if (key == GLFW_KEY_A) keyA = isPressed;
+    else if (key == GLFW_KEY_D) keyD = isPressed;
+}
+
+glm::vec4 Camera::GetFreeViewDirection() const
+{
+    return glm::vec4(
+        -std::cos(phi) * std::sin(theta),
+        -std::sin(phi),
+        -std::cos(phi) * std::cos(theta),
+         0.0f
+    );
+}
+
+void Camera::UpdateFreeCamera(double deltaT)
+{
+    if (mode != Free) return;
+
+    float speed = 25.0f * (float)deltaT;
+
+    glm::vec4 view_dir  = GetFreeViewDirection();
+    glm::vec4 up_vec    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    glm::vec4 right_dir = crossproduct(view_dir, up_vec);
+    right_dir = right_dir / norm(right_dir);
+
+    if (keyW) free_position += view_dir  * speed;
+    if (keyS) free_position -= view_dir  * speed;
+    if (keyD) free_position += right_dir * speed;
+    if (keyA) free_position -= right_dir * speed;
+    free_position.w = 1.0f;
 }
 
 void Camera::SetScreenRatio(int width, int height)
@@ -113,6 +159,7 @@ glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
     glm::vec4 camera_view_vector;
     glm::vec4 camera_up_vector;
 
+    // Câmera orbital (look-at)
     if (mode == Orbit){
         r = distance;
         y = r * std::sin(phi);
@@ -124,18 +171,50 @@ glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
         camera_position_c.w = 1.0f;
         glm::vec4 camera_lookat_l = bus.position;
         camera_view_vector = camera_lookat_l - camera_position_c;
+    // Câmera bumper
     } else if (mode == Bumper){
         camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         camera_position_c = bus.GetModelMatrix() * bumper_offset_local;
         camera_view_vector = Matrix_Rotate_Y(bus.yaw) * bus.forward_local;
+    // Câmera livre
+    } else if (mode == Free){
+        camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        camera_position_c = free_position;
+        camera_view_vector = GetFreeViewDirection();
     }
 
     return Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
 }
 
 void Camera::ToggleCameraMode(){
+    keyW = keyA = keyS = keyD = false;
+
     if (mode == Orbit) mode = Bumper;
-    else mode = Orbit;
+    else // nova condicional para a orbital
+    {
+        mode = Orbit;
+        if (phi < 0.02f) phi = 0.02f;
+    }
+}
+
+// Trecho da câmera livre
+void Camera::ToggleFreeCamera(const glm::vec4& focus_position){
+    keyW = keyA = keyS = keyD = false;
+
+    if (mode != Free)
+    {
+        previous_mode = mode;
+        mode = Free;
+        free_position = focus_position + glm::vec4(0.0f, 5.0f, 8.0f, 0.0f);
+        free_position.w = 1.0f;
+        printf("Camera: Livre (F11 para sair, WASD para mover, mouse para olhar)\n");
+    }
+    else
+    {
+        mode = previous_mode;
+        if (mode == Orbit && phi < 0.02f) phi = 0.02f;
+        printf("Camera: %s\n", (mode == Orbit) ? "Orbit" : "Bumper");
+    }
 }
 
 glm::mat4 Camera::ComputeProjectionMatrix() const
