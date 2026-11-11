@@ -37,7 +37,7 @@ static glm::vec3 LerpColor(const glm::vec3& a, const glm::vec3& b, float t)
 
 Lighting::Lighting()
     : sun_angle(1.0f)      // Posição inicial: Sol elevado a ~57 graus do horizonte
-    , fog_density(0.04f)   // Densidade moderada de névoa atmosférica
+    , fog_density(0.025f)   // Densidade moderada de névoa atmosférica
 {
 }
 
