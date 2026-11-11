@@ -21,7 +21,6 @@ bin/
 
 # --- Ficheiros Objeto e Bibliotecas Estáticas ---
 *.o
-*.obj
 *.a
 *.lib
 

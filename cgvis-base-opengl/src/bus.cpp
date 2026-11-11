@@ -4,10 +4,10 @@
 // Responsável pelo estado do veículo na cena (posição, escala e, futuramente,
 // orientação/velocidade) e pela composição da sua matriz Model:
 //
-//     M_bus = Translate(pos) * Rotate_Y(yaw) * Rotate_X(-pi/2) * Scale(s)
+//     M_bus = Translate(pos) * Rotate_Y(yaw) * Scale(s)
 //
-// onde Rotate_X(-pi/2) converte o modelo exportado do Blender (Z-up) para a
-// convenção Y-up da cena. Também desenha todas as shapes do ObjModel do ônibus
+// Modelo exportado do Blender em .obj usando Z forward e Y up
+// Também desenha todas as shapes do ObjModel do ônibus
 // enviando a matriz Model e o object_id BUS para os shaders.
 //
 // Todas as transformações usam exclusivamente as funções de "matrices.h".
@@ -21,17 +21,69 @@
 
 Bus g_Bus;
 
-Bus::Bus()
-    : position(glm::vec4(0.0f, -0.4f, 0.0f, 1.0f))
-    , scale(glm::vec3(0.25f, 0.25f, 0.25f))
-{
+Bus::Bus(){
+    position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    scale = glm::vec3(1.0f, 1.0f, 1.0f);
+    forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+    yaw = 0;
+
+    // Physics
+    speed = 0.0f;
+}
+
+// TODO: fix holding key bug
+void Bus::OnKey(int key, int action){
+    bool isPressed;
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) isPressed = true;
+    else if (action == GLFW_RELEASE) isPressed = false;
+
+    if (key == GLFW_KEY_W){
+        keyW = isPressed;
+    } else if (key == GLFW_KEY_S){
+        keyS = isPressed;
+    } else if (key == GLFW_KEY_A){
+        keyA = isPressed;
+    } else if (key == GLFW_KEY_D){
+        keyD = isPressed;
+    }
+
+    // printf("Bus::OnKey %d %d\n", key, action);
+}
+
+void Bus::UpdatePos(double deltaT){
+    // Drive direction
+    if (keyW)       direction = 1.0f;
+    else if (keyS)  direction = -1.0f;
+    else            direction = 0.0f;
+
+    // Calculate speed
+    speed += direction * 2.0f * deltaT; // 2.0f = engine power
+    float drag = (speed * speed * 0.1f + 0.5f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
+
+    // apply drag against speed (positive if going backwards)
+    if (speed > 0) speed -= drag;
+    else speed += drag;
+
+    // stop movement once speed is very low
+    if (std::abs(speed) <= drag) speed = 0;
+
+    // Calculate turning rate/direction
+    int turn = keyA - keyD;
+
+    // Forward vector
+    glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
+
+    // Update position
+    position += forward * speed * (float)deltaT;
+
+    // Update angle (only while moving, invert if reversing)
+    yaw += turn * speed * 0.2f * deltaT;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
     return Matrix_Translate(position.x, position.y, position.z)
-         * Matrix_Rotate_Y((float)glfwGetTime())
-         * Matrix_Rotate_X(-3.14159265f / 2.0f)
+         * Matrix_Rotate_Y(yaw)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }
 
