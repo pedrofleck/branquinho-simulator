@@ -14,9 +14,13 @@ public:
 
     // Data
     float yaw;
-    float speed;
+    float direction;
     glm::vec4 position;
     glm::vec3 scale;
+    glm::vec4 forward_local;
+
+    // Physics
+    float speed;
 
     // Keys
     bool keyW;

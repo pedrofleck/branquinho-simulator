@@ -23,8 +23,12 @@ Bus g_Bus;
 
 Bus::Bus(){
     position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-    scale = glm::vec3(0.25f, 0.25f, 0.25f);
+    scale = glm::vec3(1.0f, 1.0f, 1.0f);
+    forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     yaw = 0;
+
+    // Physics
+    speed = 0.0f;
 }
 
 // TODO: fix holding key bug
@@ -47,22 +51,33 @@ void Bus::OnKey(int key, int action){
 }
 
 void Bus::UpdatePos(double deltaT){
-    // Calculate speed
-    if (keyW)       speed = 1.0f;
-    else if (keyS)  speed = -1.0f;
-    else            speed = 0.0f;
+    // Drive direction
+    if (keyW)       direction = 1.0f;
+    else if (keyS)  direction = -1.0f;
+    else            direction = 0.0f;
 
-    // Calculate yaw angle
+    // Calculate speed
+    speed += direction * 2.0f * deltaT; // 2.0f = engine power
+    float drag = (speed * speed * 0.1f + 0.5f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
+
+    // apply drag against speed (positive if going backwards)
+    if (speed > 0) speed -= drag;
+    else speed += drag;
+
+    // stop movement once speed is very low
+    if (std::abs(speed) <= drag) speed = 0;
+
+    // Calculate turning rate/direction
     int turn = keyA - keyD;
 
+    // Forward vector
+    glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
+
     // Update position
-    position.x += speed * sin(yaw) * deltaT;
-    position.z += speed * cos(yaw) * deltaT;
+    position += forward * speed * (float)deltaT;
 
     // Update angle (only while moving, invert if reversing)
-    if (speed != 0) yaw += turn * deltaT * speed;
-
-    // PrintVector(position);
+    yaw += turn * speed * 0.2f * deltaT;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
