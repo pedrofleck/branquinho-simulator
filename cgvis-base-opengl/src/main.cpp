@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
         g_Lighting.ApplyUniforms(g_GpuProgramID);
 
         // Computamos as matrizes View e Projection através do módulo Camera
-        glm::mat4 view = g_Camera.ComputeViewMatrix();
+        glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus.position);
         glm::mat4 projection = g_Camera.ComputeProjectionMatrix();
 
         glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
