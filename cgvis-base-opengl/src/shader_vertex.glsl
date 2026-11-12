@@ -70,7 +70,7 @@ void main()
 
     // Normal do vértice atual no sistema de coordenadas global (World).
     // Veja slides 123-151 do documento Aula_07_Transformacoes_Geometricas_3D.pdf.
-    normal = inverse(transpose(model)) * normal_coefficients;
+    normal = inverse(transpose(model)) * vec4(normal_coefficients.xyz, 0.0);
     normal.w = 0.0;
 
     // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)

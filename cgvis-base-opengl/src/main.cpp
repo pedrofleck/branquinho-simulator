@@ -124,8 +124,9 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0 (lataria/tijolos)
     LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (chão)
 
-    // Gera a malha de terreno do Campus do Vale diretamente a partir do mapa topográfico PNG 16-bit
-    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 400.0f, 35.0f, 4, 40.0f);
+    // Gera a malha de terreno do Campus do Vale em escala real (1px = 1.0m, 33.0m a 137.043m)
+    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 1.0f, 33.0f, 104.043f, 80.0f);
+    g_Bus.position.y = GetTerrainHeight(g_Bus.position.x, g_Bus.position.z);
 
     // Carregamos a malha tridimensional complexa do ônibus Mascarello Gran Midi
     ObjModel branquinhomodel("../../../data/branquinho.obj");

@@ -36,7 +36,7 @@ Camera::Camera(){
     use_perspective = true;
     screen_ratio = 1.0f;
     nearplane = -0.1f;
-    farplane = -600.0f;
+    farplane = -3500.0f;
     fov = 3.141592f / 3.0f;
     left_button_pressed = false;
     last_cursor_x = 0.0;
@@ -133,7 +133,7 @@ void Camera::UpdateFreeCamera(double deltaT)
 {
     if (mode != Free) return;
 
-    float speed = 25.0f * (float)deltaT;
+    float speed = 120.0f * (float)deltaT;
 
     glm::vec4 view_dir  = GetFreeViewDirection();
     glm::vec4 up_vec    = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
