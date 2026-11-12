@@ -51,7 +51,8 @@ GLint  g_projection_uniform;
 GLint  g_object_id_uniform;
 GLint  g_bbox_min_uniform;
 GLint  g_bbox_max_uniform;
-GLuint g_NumLoadedTextures = 0;
+GLuint g_NumLoadedTextures   = 0;
+bool   g_HasSatelliteTexture = false;
 
 // Construtor do ObjModel
 ObjModel::ObjModel(const char* filename, const char* basepath, bool triangulate)
@@ -580,11 +581,11 @@ void BuildHeightmapAndAddToVirtualScene(
     g_VirtualScene[object_name] = theobject;
 }
 
-void LoadTextureImage(const char* filename)
+bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mode, bool optional)
 {
     printf("Carregando imagem \"%s\"... ", filename);
 
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(flip_vertically);
     int width;
     int height;
     int channels;
@@ -592,19 +593,60 @@ void LoadTextureImage(const char* filename)
 
     if (data == NULL)
     {
+        if (optional)
+        {
+            printf("NAO ENCONTRADA (opcional, usando textura de solo padrao).\n");
+            return false;
+        }
         fprintf(stderr, "ERROR: Cannot open image file \"%s\".\n", filename);
         std::exit(EXIT_FAILURE);
     }
 
     printf("OK (%dx%d).\n", width, height);
 
+    // Verifica se a imagem excede o tamanho máximo de textura 2D suportado pela GPU (GL_MAX_TEXTURE_SIZE)
+    GLint max_tex_size = 8192;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
+
+    std::vector<unsigned char> resized_buffer;
+    const unsigned char* upload_data = data;
+
+    if (width > max_tex_size || height > max_tex_size)
+    {
+        float scale = (float)max_tex_size / (float)std::max(width, height);
+        int new_w   = std::max(1, (int)std::floor((float)width  * scale));
+        int new_h   = std::max(1, (int)std::floor((float)height * scale));
+
+        printf("  -> Redimensionando textura gigante (%dx%d) para caber no limite da GPU (%dx%d)...\n",
+               width, height, new_w, new_h);
+
+        resized_buffer.resize((size_t)new_w * (size_t)new_h * 3);
+        for (int y = 0; y < new_h; ++y)
+        {
+            int src_y = std::min(height - 1, (int)((size_t)y * (size_t)height / (size_t)new_h));
+            for (int x = 0; x < new_w; ++x)
+            {
+                int src_x = std::min(width - 1, (int)((size_t)x * (size_t)width / (size_t)new_w));
+                size_t dst_idx = ((size_t)y * (size_t)new_w + (size_t)x) * 3;
+                size_t src_idx = ((size_t)src_y * (size_t)width + (size_t)src_x) * 3;
+                resized_buffer[dst_idx + 0] = data[src_idx + 0];
+                resized_buffer[dst_idx + 1] = data[src_idx + 1];
+                resized_buffer[dst_idx + 2] = data[src_idx + 2];
+            }
+        }
+
+        width       = new_w;
+        height      = new_h;
+        upload_data = resized_buffer.data();
+    }
+
     GLuint texture_id;
     GLuint sampler_id;
     glGenTextures(1, &texture_id);
     glGenSamplers(1, &sampler_id);
 
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap_mode);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap_mode);
 
     glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -617,13 +659,14 @@ void LoadTextureImage(const char* filename)
     GLuint textureunit = g_NumLoadedTextures;
     glActiveTexture(GL_TEXTURE0 + textureunit);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, upload_data);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindSampler(textureunit, sampler_id);
 
     stbi_image_free(data);
 
     g_NumLoadedTextures += 1;
+    return true;
 }
 
 void LoadShader(const char* filename, GLuint shader_id)
@@ -749,5 +792,6 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), g_HasSatelliteTexture ? 1 : 0);
     glUseProgram(0);
 }

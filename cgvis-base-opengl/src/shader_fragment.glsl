@@ -46,6 +46,10 @@ const float HEADLIGHT_SPILL_COS       = 0.45;                   // Abertura do h
 // --- 3. Emissão Visual das Lâmpadas/Lentes Acesas ---
 const vec3  BULB_GLOW_COLOR     = vec3(1.00, 0.92, 0.72);
 const float BULB_GLOW_INTENSITY = 1.8;
+
+// --- 4. Textura do Terreno (Foto de Satélite satelite_2012.png + Micro-Detalhe) ---
+const float TERRAIN_DETAIL_TILE     = 80.0; // Repetições da textura de detalhe pelo mapa de 1930x1703m
+const float TERRAIN_DETAIL_STRENGTH = 0.15; // 0.0 = 100% foto de satélite pura; 0.15 = nitidez de perto
 // ============================================================================
 
 // ----------------------------------------------------------------------------
@@ -82,8 +86,9 @@ uniform vec4 bbox_max;  // Maior coordenada XYZ da caixa delimitadora do objeto
 // Amostradores de Textura 2D (Unidades de textura ativas da GPU)
 // ----------------------------------------------------------------------------
 uniform sampler2D TextureImage0; // Textura difusa principal (ex.: lataria/tijolos)
-uniform sampler2D TextureImage1; // Textura secundária (ex.: terreno/asfalto)
-uniform sampler2D TextureImage2; // Textura de detalhes adicionais
+uniform sampler2D TextureImage1; // Textura secundária (ex.: detalhe de solo/asfalto)
+uniform sampler2D TextureImage2; // Textura de satélite do Campus do Vale (satelite_2012.png)
+uniform int       has_satellite_texture; // 1 se satelite_2012.png foi carregada, 0 caso contrário
 
 // ----------------------------------------------------------------------------
 // Uniforms do Sistema de Iluminação Solar, Luzes Pontuais e Névoa (lighting.cpp)
@@ -268,11 +273,23 @@ void main()
     }
     else if ( object_id == PLANE )
     {
-        // Coordenadas UV do plano do chão vindas do plane.obj
+        // Coordenadas UV normalizadas [0.0 .. 1.0] cobrindo o mapa inteiro de vale.png
         U = texcoords.x;
         V = texcoords.y;
 
-        Kd0 = texture(TextureImage1, vec2(U, V)).rgb;
+        vec3 detail_color = texture(TextureImage1, vec2(U, V) * TERRAIN_DETAIL_TILE).rgb;
+
+        if (has_satellite_texture == 1)
+        {
+            vec3 sat_color    = texture(TextureImage2, vec2(U, V)).rgb;
+            float detail_gain = mix(1.0, (detail_color.r + detail_color.g + detail_color.b) / 1.5, TERRAIN_DETAIL_STRENGTH);
+            Kd0 = sat_color * detail_gain;
+        }
+        else
+        {
+            Kd0 = detail_color;
+        }
+
         Ks  = vec3(0.05, 0.05, 0.05); // Chão fosco / asfalto (pouco reflexo especular)
         q   = 16.0;                    // Destaque especular suave e disperso
     }

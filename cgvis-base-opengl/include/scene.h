@@ -61,7 +61,7 @@ void BuildHeightmapAndAddToVirtualScene(
     float       grid_spacing = 1.0f,
     float       min_altitude = 33.0f,
     float       delta_h      = 104.043f,
-    float       uv_tile      = 80.0f
+    float       uv_tile      = 1.0f
 );
 float GetTerrainHeight(float world_x, float world_z);
 void DrawVirtualObject(const char* object_name);
@@ -74,7 +74,7 @@ void LoadShader(const char* filename, GLuint shader_id);
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id);
 
 // Função de texturas
-void LoadTextureImage(const char* filename);
+bool LoadTextureImage(const char* filename, bool flip_vertically = true, GLint wrap_mode = GL_REPEAT, bool optional = false);
 
 // Variáveis globais dos uniforms do shader
 extern GLuint g_GpuProgramID;
@@ -85,5 +85,6 @@ extern GLint g_object_id_uniform;
 extern GLint g_bbox_min_uniform;
 extern GLint g_bbox_max_uniform;
 extern GLuint g_NumLoadedTextures;
+extern bool   g_HasSatelliteTexture;
 
 #endif // _SCENE_H

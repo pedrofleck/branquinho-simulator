@@ -121,11 +121,15 @@ int main(int argc, char* argv[])
     LoadShadersFromFiles();
 
     // Carregamos as imagens de textura utilizadas na cena
-    LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0 (lataria/tijolos)
-    LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (chão)
+    LoadTextureImage("../../data/red_brick_diff_1k.jpg");       // TextureImage0 (lataria/tijolos)
+    LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (detalhe do solo)
 
-    // Gera a malha de terreno do Campus do Vale em escala real (1px = 1.0m, 33.0m a 137.043m)
-    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 1.0f, 33.0f, 104.043f, 80.0f);
+    // Textura de satélite do Campus do Vale (TextureImage2):
+    // Carregada com flip_vertically = false e GL_CLAMP_TO_EDGE para alinhar 1:1 com vale.png.
+    g_HasSatelliteTexture = LoadTextureImage("../../../data/satelite_2012_low.png", false, GL_CLAMP_TO_EDGE, true);
+
+    // Gera a malha de terreno do Campus do Vale em escala real (1px = 1.0m, 33.0m a 137.043m, UV 0..1)
+    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 1.0f, 33.0f, 104.043f, 1.0f);
     g_Bus.position.y = GetTerrainHeight(g_Bus.position.x, g_Bus.position.z);
 
     // Carregamos a malha tridimensional complexa do ônibus Mascarello Gran Midi
@@ -184,8 +188,10 @@ int main(int argc, char* argv[])
         g_Lighting.UpdateBusHeadlights(g_Bus.GetModelMatrix(), g_Bus.yaw, g_Bus.headlight_state, g_Bus.IsHighBeamActive());
 
         // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
-        // Desativa a névoa automaticamente enquanto estiver no modo de câmera livre (F11)
-        g_Lighting.ApplyUniforms(g_GpuProgramID, g_Camera.mode != Camera::Free);
+        // No modo de câmera livre (F11), desativa a névoa e ativa a textura de satélite do Campus do Vale
+        bool is_free_cam = (g_Camera.mode == Camera::Free);
+        g_Lighting.ApplyUniforms(g_GpuProgramID, !is_free_cam);
+        glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), (g_HasSatelliteTexture && is_free_cam) ? 1 : 0);
 
         // Computamos as matrizes View e Projection através do módulo Camera
         glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus);
