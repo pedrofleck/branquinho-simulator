@@ -6,23 +6,19 @@
 // Executado na GPU uma vez para cada fragmento (pixel potencial) gerado pelo
 // processo de rasterização dos triângulos. Responsável por:
 //
-//   1. Coordenadas de Textura (U, V):
-//      - Mapeia atributos 'vt' do OBJ para o ônibus (BUS) e chão (PLANE).
-//      - Suporta projeção esférica e planar para objetos de teste (SPHERE/BUNNY).
+//   1. Coordenadas de Textura (U, V) e Splatting Multi-Material do Terreno:
+//      - Combina 8 materiais (splatmap_0 e splatmap_1) com modulação cromática
+//        real de alta resolução (macro_albedo 4K) e micro-detalhe seamless.
+//      - Preserva o modo de debug via F10 (satelite_2012_low.png via TextureImage2).
+//      - Renderiza as árvores 3D instanciadas (TREE_TRUNK e TREE_CANOPY).
 //
 //   2. Modelo de Iluminação Fotométrico (Disney BRDF / Blinn-Phong):
 //      - Difusa de Lambert: espalhamento isotrópico proporcional a dot(n, l).
 //      - Especular de Blinn-Phong: reflexo direcionado usando o half-vector h.
-//      - Efeito Fresnel de Schlick: reflexão intensificada em ângulos de visão rasantes.
-//      - Luz ambiente: espalhamento indireto da luz da abóbada celeste.
+//      - Efeito Fresnel de Schlick: reflexão intensificada em ângulos rasantes.
+//      - Parâmetros Ks e q dinâmicos por material (água, asfalto, grama/terra).
 //
-//   3. Névoa Atmosférica Exponencial (Distance Fog):
-//      - Simula a dispersão de luz pela atmosfera conforme a distância da câmera,
-//        fundindo suavemente objetos distantes com a cor do horizonte/céu.
-//
-//   4. Correção Gamma:
-//      - Converte a iluminação calculada em espaço linear para o espaço de cor
-//        sRGB do monitor (potência de 1/2.2).
+//   3. Névoa Atmosférica Exponencial (Distance Fog) e Correção Gamma (sRGB).
 // ============================================================================
 
 // ============================================================================
@@ -47,9 +43,9 @@ const float HEADLIGHT_SPILL_COS       = 0.45;                   // Abertura do h
 const vec3  BULB_GLOW_COLOR     = vec3(1.00, 0.92, 0.72);
 const float BULB_GLOW_INTENSITY = 1.8;
 
-// --- 4. Textura do Terreno (Foto de Satélite satelite_2012.png + Micro-Detalhe) ---
-const float TERRAIN_DETAIL_TILE     = 80.0; // Repetições da textura de detalhe pelo mapa de 1930x1703m
-const float TERRAIN_DETAIL_STRENGTH = 0.15; // 0.0 = 100% foto de satélite pura; 0.15 = nitidez de perto
+// --- 4. Textura do Terreno (8 Materiais Placeholder via Texture2DArray) ---
+const vec2  TERRAIN_WORLD_METERS        = vec2(1930.0, 1703.0); // 1 pixel = 1.0 metro em vale_processed.png
+const float TERRAIN_MACRO_TINT_STRENGTH = 0.30;                 // Modulação cromática suave apenas em áreas naturais
 // ============================================================================
 
 // ----------------------------------------------------------------------------
@@ -70,13 +66,15 @@ uniform mat4 projection;  // Matriz Projection: coordenadas da câmera -> NDC
 // ----------------------------------------------------------------------------
 // Identificador do Objeto e Bounding Box
 // ----------------------------------------------------------------------------
-#define SPHERE    0
-#define BUNNY     1
-#define PLANE     2
-#define BUS       3
+#define SPHERE         0
+#define BUNNY          1
+#define PLANE          2
+#define BUS            3
 #define LIGHTPOLE      4
 #define LIGHTBULB      5
 #define HEADLIGHT_LENS 6
+#define TREE_TRUNK     7
+#define TREE_CANOPY    8
 uniform int object_id;
 
 uniform vec4 bbox_min;  // Menor coordenada XYZ da caixa delimitadora do objeto
@@ -85,10 +83,18 @@ uniform vec4 bbox_max;  // Maior coordenada XYZ da caixa delimitadora do objeto
 // ----------------------------------------------------------------------------
 // Amostradores de Textura 2D (Unidades de textura ativas da GPU)
 // ----------------------------------------------------------------------------
-uniform sampler2D TextureImage0; // Textura difusa principal (ex.: lataria/tijolos)
-uniform sampler2D TextureImage1; // Textura secundária (ex.: detalhe de solo/asfalto)
-uniform sampler2D TextureImage2; // Textura de satélite do Campus do Vale (satelite_2012.png)
-uniform int       has_satellite_texture; // 1 se satelite_2012.png foi carregada, 0 caso contrário
+uniform sampler2D      TextureImage0;      // Unit 0: Textura difusa principal (tijolos)
+uniform sampler2D      TextureImage1;      // Unit 1: Textura secundária (detalhe rochoso)
+uniform sampler2D      TextureImage2;      // Unit 2: Ortofoto satelite_2012_low.png (alternada via F10)
+uniform sampler2D      TerrainSplat0;      // Unit 3: Splatmap 0 RGBA (R=Asfalto Prin, G=Asfalto Sec, B=Calçada, A=Grama)
+uniform sampler2D      TerrainSplat1;      // Unit 4: Splatmap 1 RGBA (R=Mata, G=Terra, B=Água, A=Prédio)
+uniform sampler2D      TerrainMacroAlbedo; // Unit 5: Macro Albedo (sutil variação cromática regional)
+uniform sampler2DArray TerrainMaterials;   // Unit 6: 8 texturas seamless placeholder (mat_0..mat_7)
+uniform sampler2D      TreeBarkTex;        // Unit 7: Textura placeholder de casca de tronco
+uniform sampler2D      TreeFoliageTex;     // Unit 8: Textura placeholder de folhagem de árvore
+
+uniform int has_satellite_texture;    // 1 quando o modo de satélite (F10) está ativo
+uniform int has_terrain_splatmaps;    // 1 quando os ativos de terreno multi-material foram carregados
 
 // ----------------------------------------------------------------------------
 // Uniforms do Sistema de Iluminação Solar, Luzes Pontuais e Névoa (lighting.cpp)
@@ -192,26 +198,13 @@ void main()
     // ========================================================================
     // 1. Posição da Câmera e Vetores Geométricos de Iluminação
     // ========================================================================
-
-    // A posição da câmera no mundo é obtida aplicando a inversa da matriz View
-    // à origem do espaço da câmera (0, 0, 0, 1).
     vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
     vec4 camera_position = inverse(view) * origin;
 
-    // Ponto da superfície sendo renderizado no espaço do mundo
     vec4 p = position_world;
-
-    // n: Vetor normal à superfície, renormalizado após interpolação do rasterizador
     vec4 n = normalize(normal);
-
-    // l: Vetor unitário que aponta da superfície em direção à fonte de luz (Sol)
     vec4 l = normalize(sun_direction);
-
-    // v: Vetor unitário que aponta da superfície em direção ao observador (Câmera)
     vec4 v = normalize(camera_position - p);
-
-    // h: Half-vector de Blinn-Phong (bissetriz entre a luz e o observador).
-    // Representa a orientação ideal de uma microrrugosidade para refletir luz especular diretamente na câmera.
     vec4 h = normalize(l + v);
 
     // ========================================================================
@@ -220,21 +213,13 @@ void main()
     float U = 0.0;
     float V = 0.0;
 
-    // Kd0: Coeficiente de refletância difusa (cor base da superfície)
-    vec3  Kd0 = vec3(0.8, 0.8, 0.8);
-
-    // Ks: Coeficiente de refletância especular (capacidade de reflexão espelhada)
-    vec3  Ks  = vec3(0.2, 0.2, 0.2);
-
-    // q: Expoente de rugosidade/brilho de Phong (valores maiores = brilho menor e mais concentrado)
-    float q   = 32.0;
-
-    // emissive: Luz própria emitida pelo objeto (ex.: bulbo da lâmpada do poste)
+    vec3  Kd0      = vec3(0.8, 0.8, 0.8);
+    vec3  Ks       = vec3(0.2, 0.2, 0.2);
+    float q        = 32.0;
     vec3  emissive = vec3(0.0, 0.0, 0.0);
 
     if ( object_id == SPHERE )
     {
-        // Projeção esférica baseada nas coordenadas do modelo
         vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
         vec4 d = position_model - bbox_center;
 
@@ -249,7 +234,6 @@ void main()
     }
     else if ( object_id == BUNNY )
     {
-        // Projeção planar XY normalizada pela bounding box
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
         float miny = bbox_min.y;
@@ -262,47 +246,133 @@ void main()
     }
     else if ( object_id == BUS )
     {
-        // Coordenadas UV vindas diretamente dos atributos 'vt' do arquivo branquinho.obj
         U = texcoords.x;
         V = texcoords.y;
 
-        Kd0 = vec3(0.95, 0.95, 0.95); // placeholder de "textura" branca
-        // Kd0 = texture(TextureImage0, vec2(U, V)).rgb; // antiga textura de tijolos
-        Ks  = vec3(0.50, 0.50, 0.50); // Lataria do ônibus possui reflexo especular nítido
-        q   = 64.0;                    // Destaque especular concentrado
+        Kd0 = vec3(0.95, 0.95, 0.95);
+        Ks  = vec3(0.50, 0.50, 0.50);
+        q   = 64.0;
     }
     else if ( object_id == PLANE )
     {
-        // Coordenadas UV normalizadas [0.0 .. 1.0] cobrindo o mapa inteiro de vale.png
         U = texcoords.x;
         V = texcoords.y;
 
-        vec3 detail_color = texture(TextureImage1, vec2(U, V) * TERRAIN_DETAIL_TILE).rgb;
-
+        // No modo satélite (F10), exibe satelite_2012_low.png (TextureImage2)
         if (has_satellite_texture == 1)
         {
+            vec3 detail_color = texture(TextureImage1, vec2(U, V) * 80.0).rgb;
             vec3 sat_color    = texture(TextureImage2, vec2(U, V)).rgb;
-            float detail_gain = mix(1.0, (detail_color.r + detail_color.g + detail_color.b) / 1.5, TERRAIN_DETAIL_STRENGTH);
+            float detail_gain = mix(1.0, (detail_color.r + detail_color.g + detail_color.b) / 1.5, 0.15);
             Kd0 = sat_color * detail_gain;
+            Ks  = vec3(0.05, 0.05, 0.05);
+            q   = 16.0;
+        }
+        else if (has_terrain_splatmaps == 1)
+        {
+            // Lê os pesos dos 8 materiais nos Splatmaps RGBA lineares
+            vec4 s0 = texture(TerrainSplat0, vec2(U, V));
+            vec4 s1 = texture(TerrainSplat1, vec2(U, V));
+            float w_sum = (s0.r + s0.g + s0.b + s0.a) + (s1.r + s1.g + s1.b + s1.a);
+
+            // Descarta fragmentos fora da máscara válida (áreas em preto de bruto_2012_mascara.tiff)
+            if (w_sum < 0.02)
+                discard;
+
+            s0 /= w_sum;
+            s1 /= w_sum;
+
+            float w_asph_main = s0.r;
+            float w_asph_sec  = s0.g;
+            float w_sidewalk  = s0.b;
+            float w_grass     = s0.a;
+            float w_forest    = s1.r;
+            float w_dirt      = s1.g;
+            float w_water     = s1.b;
+            float w_building  = s1.a;
+
+            // Amostragem métrica das 8 texturas placeholder no Texture2DArray (sem usar o satélite borrado como piso)
+            vec2 world_m = vec2(U, V) * TERRAIN_WORLD_METERS;
+
+            vec2 uv_road     = world_m / 4.8;
+            vec2 uv_sidewalk = world_m / 3.6;
+            vec2 uv_organic  = world_m / 5.5;
+            vec2 uv_org_far  = world_m / 19.0 + vec2(0.37, 0.71);
+            vec2 uv_water    = world_m / 11.0;
+            vec2 uv_building = world_m / 6.0;
+
+            vec3 c_asph_main = texture(TerrainMaterials, vec3(uv_road,     0.0)).rgb;
+            vec3 c_asph_sec  = texture(TerrainMaterials, vec3(uv_road,     1.0)).rgb;
+            vec3 c_sidewalk  = texture(TerrainMaterials, vec3(uv_sidewalk, 2.0)).rgb;
+            vec3 c_grass     = mix(texture(TerrainMaterials, vec3(uv_organic, 3.0)).rgb,
+                                   texture(TerrainMaterials, vec3(uv_org_far, 3.0)).rgb, 0.28);
+            vec3 c_forest    = mix(texture(TerrainMaterials, vec3(uv_organic, 4.0)).rgb,
+                                   texture(TerrainMaterials, vec3(uv_org_far, 4.0)).rgb, 0.28);
+            vec3 c_dirt      = mix(texture(TerrainMaterials, vec3(uv_organic, 5.0)).rgb,
+                                   texture(TerrainMaterials, vec3(uv_org_far, 5.0)).rgb, 0.28);
+            vec3 c_water     = texture(TerrainMaterials, vec3(uv_water,    6.0)).rgb;
+            vec3 c_building  = texture(TerrainMaterials, vec3(uv_building, 7.0)).rgb;
+
+            vec3 mat_color = w_asph_main * c_asph_main
+                           + w_asph_sec  * c_asph_sec
+                           + w_sidewalk  * c_sidewalk
+                           + w_grass     * c_grass
+                           + w_forest    * c_forest
+                           + w_dirt      * c_dirt
+                           + w_water     * c_water
+                           + w_building  * c_building;
+
+            // Modulação cromática sutil (chroma-only) apenas sobre grama/mata/terra
+            vec3 macro_col   = texture(TerrainMacroAlbedo, vec2(U, V)).rgb;
+            float macro_lum  = max(dot(macro_col, vec3(0.299, 0.587, 0.114)), 0.015);
+            vec3 chroma_tint = clamp(macro_col / macro_lum, vec3(0.75), vec3(1.25));
+            float w_organic  = clamp(w_grass + w_forest + w_dirt, 0.0, 1.0);
+            Kd0 = mat_color * mix(vec3(1.0), chroma_tint, TERRAIN_MACRO_TINT_STRENGTH * w_organic);
+
+            // Propriedades fotométricas padrão de terreno (água com textura estática simples por enquanto)
+            float w_asph  = w_asph_main + w_asph_sec;
+            float w_paved = w_sidewalk + w_building;
+            Ks = w_asph * vec3(0.10, 0.10, 0.10) + (1.0 - w_asph) * vec3(0.04, 0.04, 0.04);
+            q  = w_asph * 24.0 + w_paved * 14.0 + (1.0 - w_asph - w_paved) * 8.0;
         }
         else
         {
-            Kd0 = detail_color;
+            Kd0 = texture(TextureImage1, vec2(U, V) * 80.0).rgb;
+            Ks  = vec3(0.05, 0.05, 0.05);
+            q   = 16.0;
         }
+    }
+    else if ( object_id == TREE_TRUNK )
+    {
+        U = texcoords.x * 2.0;
+        V = texcoords.y * 3.0;
+        Kd0 = texture(TreeBarkTex, vec2(U, V)).rgb;
+        Ks  = vec3(0.03, 0.03, 0.03);
+        q   = 8.0;
+    }
+    else if ( object_id == TREE_CANOPY )
+    {
+        U = texcoords.x * 3.0;
+        V = texcoords.y * 3.0;
+        vec3 fol_tex = texture(TreeFoliageTex, vec2(U, V)).rgb;
 
-        Ks  = vec3(0.05, 0.05, 0.05); // Chão fosco / asfalto (pouco reflexo especular)
-        q   = 16.0;                    // Destaque especular suave e disperso
+        // Harmoniza sutilmente o tom da copa com o macro_albedo da região onde a árvore está plantada
+        vec2 terrain_uv = vec2(p.x / 1930.0 + 0.5, p.z / 1703.0 + 0.5);
+        vec3 local_sat  = texture(TerrainMacroAlbedo, clamp(terrain_uv, 0.0, 1.0)).rgb;
+        float shade_grad = mix(0.72, 1.14, clamp(n.y * 0.5 + 0.5, 0.0, 1.0));
+
+        Kd0 = mix(fol_tex, local_sat * 1.15, 0.32) * shade_grad;
+        Ks  = vec3(0.04, 0.05, 0.03);
+        q   = 10.0;
     }
     else if ( object_id == LIGHTPOLE )
     {
-        // Estrutura metálica cinza escura do poste de iluminação
         Kd0 = vec3(0.22, 0.23, 0.25);
         Ks  = vec3(0.60, 0.60, 0.65);
         q   = 64.0;
     }
     else if ( object_id == LIGHTBULB )
     {
-        // Bulbo luminoso no topo do poste (usa as constantes do painel de hot-reload)
         Kd0      = BULB_GLOW_COLOR;
         Ks       = vec3(0.8, 0.8, 0.8);
         q        = 64.0;
@@ -310,9 +380,6 @@ void main()
     }
     else if ( object_id == HEADLIGHT_LENS )
     {
-        // Na malha branquinho.obj, _tex_low_beam__emissive_ agrupa os faróis frontais
-        // (z ~ -7.88, |x| ~ 1.08) junto com luzes marcadoras na lateral do ônibus (|x| ~ 1.27, z > -7.65).
-        // Filtramos por position_model para acender SOMENTE as lentes frontais do parachoque:
         if (position_model.z < -7.75 && position_model.y < 1.50 && abs(position_model.x) < 1.20)
         {
             Kd0      = HEADLIGHT_COLOR;
@@ -322,7 +389,6 @@ void main()
         }
         else
         {
-            // Luzes laterais permanecem apagadas com o material padrão do ônibus
             Kd0 = vec3(0.95, 0.95, 0.95);
             Ks  = vec3(0.50, 0.50, 0.50);
             q   = 64.0;
@@ -332,59 +398,34 @@ void main()
     // ========================================================================
     // 3. Equação de Iluminação (Difusa + Especular com Aproximação de Fresnel)
     // ========================================================================
-
-    // Produtos escalares fundamentais do modelo de iluminação:
-    // NdotL: Cosseno do ângulo de incidência da luz (Lei do Cosseno de Lambert)
     float NdotL = max(0.0, dot(n, l));
-
-    // NdotH: Proximidade da normal ao half-vector (intensidade do brilho especular)
     float NdotH = max(0.0, dot(n, h));
-
-    // LdotH: Cosseno do ângulo entre a luz e o half-vector (usado no efeito Fresnel)
     float LdotH = max(0.0, dot(l, h));
 
-    // Aproximação de Schlick para o Efeito Fresnel:
-    // Superfícies dielétricas refletem uma fração Ks de luz quando vistas de frente,
-    // mas a refletância sobe para 1.0 (100%) em ângulos tangenciais/rasantes.
     vec3 fresnel = Ks + (vec3(1.0) - Ks) * pow(1.0 - LdotH, 5.0);
-
-    // Termo especular Blinn-Phong ponderado pelo Fresnel e atenuado por NdotL
     vec3 specular_term = fresnel * pow(NdotH, q) * NdotL;
 
-    // Equação da cor iluminada pelo Sol e ambiente:
-    // Cor = (Luz Ambiente * Kd) + (Luz Direta do Sol * (Kd * Difuso + Especular))
     vec3 lit_color = Kd0 * ambient_color + (Kd0 * NdotL + specular_term) * sun_color;
 
-    // Acumula a contribuição de todas as luzes pontuais/direcionadas (ex.: postes de luz)
     for (int i = 0; i < num_point_lights; ++i)
     {
         lit_color += CalcPointLight(point_lights[i], n, p, v, Kd0, Ks, q);
     }
 
-    // Soma a emissão própria do material (ex.: lâmpada acesa)
     lit_color += emissive;
 
     // ========================================================================
     // 4. Correção Gamma (Linear -> sRGB)
     // ========================================================================
-    // Todos os cálculos de física da luz (somas, multiplicações de radiação) ocorrem
-    // em espaço de cor linear. Os monitores aplicam uma curva gamma padrão (~2.2),
-    // portanto devemos aplicar o inverso (potência de 1/2.2) antes da exibição.
     lit_color = pow(lit_color, vec3(1.0, 1.0, 1.0) / 2.2);
 
     // ========================================================================
     // 5. Névoa Atmosférica Exponencial (Distance Fog)
     // ========================================================================
-    // Modela a extinção da luz refletida do objeto e a sobreposição da luz
-    // dispersada pela atmosfera ao longo da distância de visualização:
-    //   fog_factor = exp(-densidade * distancia)
-    // Quando a distância é zero, fog_factor = 1.0 (cor pura do objeto).
-    // Em distâncias grandes, fog_factor -> 0.0 (objeto se funde à cor do céu).
     float dist = length(camera_position - p);
     float fog_factor = exp(-fog_density * dist);
     fog_factor = clamp(fog_factor, 0.0, 1.0);
 
-    // Mistura linear entre a cor do objeto iluminado e a cor do horizonte
     color.rgb = mix(fog_color, lit_color, fog_factor);
     color.a = 1.0;
 }

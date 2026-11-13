@@ -1,5 +1,5 @@
 // ============================================================================
-// scene.cpp - Cena virtual e infraestrutura de GPU
+// scene.cpp - Cena virtual, terreno multi-material e infraestrutura de GPU
 //
 // Responsável por:
 //   - Definir as variáveis globais da cena virtual (g_VirtualScene), da pilha
@@ -8,7 +8,10 @@
 //   - Carregar modelos .obj (ObjModel, via tinyobjloader), calcular normais
 //     quando ausentes e enviar a geometria para a GPU (VAO/VBOs), registrando
 //     cada shape como um SceneObject desenhável por nome (DrawVirtualObject);
-//   - Carregar texturas a partir de imagens (via stb_image);
+//   - Construir a malha do terreno 16-bit descartando as áreas em preto da
+//     máscara (`valid_mask.png`) e instanciar a floresta de árvores 3D usando
+//     exclusivamente as matrizes de `matrices.h`;
+//   - Carregar texturas RGB (sRGB) e Splatmaps RGBA (Lineares);
 //   - Ler, compilar e linkar os shaders GLSL (vertex/fragment) e obter as
 //     localizações das variáveis uniform utilizadas na renderização.
 // ============================================================================
@@ -44,6 +47,17 @@ static int                g_TerrainGridH      = 0;
 static float              g_TerrainWorldWidth = 100.0f;
 static float              g_TerrainWorldDepth = 100.0f;
 
+// Controle das árvores instanciadas no terreno
+struct TreeInstanceData
+{
+    glm::mat4 model;
+};
+static bool                          g_TreeUseBatchedMesh = false;
+static bool                          g_TreeLoaded         = false;
+static std::vector<TreeInstanceData> g_TreeInstances;
+static std::vector<std::string>      g_TreeTrunkShapes;
+static std::vector<std::string>      g_TreeCanopyShapes;
+
 GLuint g_GpuProgramID = 0;
 GLint  g_model_uniform;
 GLint  g_view_uniform;
@@ -53,6 +67,8 @@ GLint  g_bbox_min_uniform;
 GLint  g_bbox_max_uniform;
 GLuint g_NumLoadedTextures   = 0;
 bool   g_HasSatelliteTexture = false;
+bool   g_SatelliteTerrainMode = false;
+bool   g_HasTerrainSplatmaps = false;
 
 // Construtor do ObjModel
 ObjModel::ObjModel(const char* filename, const char* basepath, bool triangulate)
@@ -352,18 +368,23 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
 
 void DrawVirtualObject(const char* object_name)
 {
-    glBindVertexArray(g_VirtualScene[object_name].vertex_array_object_id);
+    auto it = g_VirtualScene.find(object_name);
+    if (it == g_VirtualScene.end())
+        return;
 
-    glm::vec3 bbox_min = g_VirtualScene[object_name].bbox_min;
-    glm::vec3 bbox_max = g_VirtualScene[object_name].bbox_max;
+    const SceneObject& obj = it->second;
+    glBindVertexArray(obj.vertex_array_object_id);
+
+    glm::vec3 bbox_min = obj.bbox_min;
+    glm::vec3 bbox_max = obj.bbox_max;
     glUniform4f(g_bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f);
     glUniform4f(g_bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
 
     glDrawElements(
-        g_VirtualScene[object_name].rendering_mode,
-        g_VirtualScene[object_name].num_indices,
+        obj.rendering_mode,
+        (GLsizei)obj.num_indices,
         GL_UNSIGNED_INT,
-        (void*)(g_VirtualScene[object_name].first_index * sizeof(GLuint))
+        (void*)(obj.first_index * sizeof(GLuint))
     );
 
     glBindVertexArray(0);
@@ -420,7 +441,7 @@ struct TerrainVertex
 //   - Escala horizontal 1:1 (1 pixel = grid_spacing = 1.0 metro), centralizado na origem;
 //   - Calibração altimétrica: y = min_altitude + (pixel_uint16 / 65535.0f) * delta_h;
 //   - Normais por diferenças finitas centrais: normalize(vec3(hL - hR, 2*gridSpacing, hU - hD));
-//   - Único VBO intercalado (vec3 pos, vec3 normal, vec2 uv) + EBO (GL_TRIANGLE_STRIP, unsigned int).
+//   - Descarta da malha 3D todas as células que estão em preto na máscara (`valid_mask.png`).
 // ----------------------------------------------------------------------------
 void BuildHeightmapAndAddToVirtualScene(
     const char* filename,
@@ -428,7 +449,8 @@ void BuildHeightmapAndAddToVirtualScene(
     float       grid_spacing,
     float       min_altitude,
     float       delta_h,
-    float       uv_tile
+    float       uv_tile,
+    const char* mask_filename
 )
 {
     printf("Carregando heightmap 16-bit \"%s\"... ", filename);
@@ -440,8 +462,15 @@ void BuildHeightmapAndAddToVirtualScene(
 
     if (raw_pixels == NULL)
     {
-        fprintf(stderr, "ERROR: Nao foi possivel abrir o heightmap 16-bit \"%s\".\n", filename);
-        std::exit(EXIT_FAILURE);
+        // Fallback automático para data/vale.png caso vale_processed.png ainda não exista
+        const char* fallback = "../../../data/vale.png";
+        printf("\n  -> Aviso: \"%s\" nao encontrado, usando \"%s\"... ", filename, fallback);
+        raw_pixels = stbi_load_16(fallback, &width, &height, &channels, 1);
+        if (raw_pixels == NULL)
+        {
+            fprintf(stderr, "ERROR: Nao foi possivel abrir o heightmap 16-bit \"%s\".\n", filename);
+            std::exit(EXIT_FAILURE);
+        }
     }
 
     g_TerrainGridW      = width;
@@ -464,6 +493,37 @@ void BuildHeightmapAndAddToVirtualScene(
 
     printf("OK (%dx%dm, altitude [%.1fm .. %.3fm]).\n",
            width, height, min_altitude, min_altitude + delta_h);
+
+    // Carrega a máscara de área válida (gerada a partir de bruto_2012_mascara.tiff)
+    // Tudo o que está em preto (0) na máscara é removido da malha 3D do cenário!
+    std::vector<unsigned char> valid_mask(num_vertices, 255);
+    if (mask_filename != NULL)
+    {
+        int mw = 0, mh = 0, mc = 0;
+        stbi_set_flip_vertically_on_load(false);
+        unsigned char* mdata = stbi_load(mask_filename, &mw, &mh, &mc, 1);
+        if (mdata != NULL)
+        {
+            if (mw == width && mh == height)
+            {
+                std::copy(mdata, mdata + num_vertices, valid_mask.begin());
+            }
+            else
+            {
+                for (int z = 0; z < height; ++z)
+                {
+                    int sz = std::min(mh - 1, (int)((size_t)z * (size_t)mh / (size_t)height));
+                    for (int x = 0; x < width; ++x)
+                    {
+                        int sx = std::min(mw - 1, (int)((size_t)x * (size_t)mw / (size_t)width));
+                        valid_mask[(size_t)z * (size_t)width + (size_t)x] = mdata[(size_t)sz * (size_t)mw + (size_t)sx];
+                    }
+                }
+            }
+            stbi_image_free(mdata);
+            printf("Mascara de recorte do terreno \"%s\" aplicada (areas pretas removidas da malha).\n", mask_filename);
+        }
+    }
 
     // 2. Preenche o VBO único intercalado (Posição vec3, Normal vec3, UV vec2)
     std::vector<TerrainVertex> vertices(num_vertices);
@@ -508,36 +568,50 @@ void BuildHeightmapAndAddToVirtualScene(
             vertices[idx].normal   = glm::vec3(n.x, n.y, n.z);
             vertices[idx].uv       = glm::vec2(u, v);
 
-            bbox_min.x = std::min(bbox_min.x, vx);
-            bbox_min.y = std::min(bbox_min.y, vy);
-            bbox_min.z = std::min(bbox_min.z, vz);
-            bbox_max.x = std::max(bbox_max.x, vx);
-            bbox_max.y = std::max(bbox_max.y, vy);
-            bbox_max.z = std::max(bbox_max.z, vz);
+            if (valid_mask[idx] > 0)
+            {
+                bbox_min.x = std::min(bbox_min.x, vx);
+                bbox_min.y = std::min(bbox_min.y, vy);
+                bbox_min.z = std::min(bbox_min.z, vz);
+                bbox_max.x = std::max(bbox_max.x, vx);
+                bbox_max.y = std::max(bbox_max.y, vy);
+                bbox_max.z = std::max(bbox_max.z, vz);
+            }
         }
     }
 
-    // 3. Gera o EBO (GL_TRIANGLE_STRIP com unsigned int e triângulos degenerados entre linhas)
-    size_t num_strips  = (size_t)(height - 1);
-    size_t num_indices = num_strips * (size_t)(width * 2) + (num_strips - 1) * 2;
+    // 3. Gera o EBO (GL_TRIANGLES emitindo apenas os quads dentro da máscara válida)
     std::vector<GLuint> indices;
-    indices.reserve(num_indices);
+    indices.reserve((size_t)(width - 1) * (size_t)(height - 1) * 2);
 
     for (int z = 0; z < height - 1; ++z)
     {
-        for (int x = 0; x < width; ++x)
+        for (int x = 0; x < width - 1; ++x)
         {
-            indices.push_back((GLuint)((size_t)z       * (size_t)width + (size_t)x));
-            indices.push_back((GLuint)((size_t)(z + 1) * (size_t)width + (size_t)x));
-        }
+            size_t i00 = (size_t)z       * (size_t)width + (size_t)x;
+            size_t i10 = (size_t)z       * (size_t)width + (size_t)(x + 1);
+            size_t i01 = (size_t)(z + 1) * (size_t)width + (size_t)x;
+            size_t i11 = (size_t)(z + 1) * (size_t)width + (size_t)(x + 1);
 
-        // Degenera a transição para o início da próxima linha mantendo a orientação GL_CCW
-        if (z < height - 2)
-        {
-            indices.push_back((GLuint)((size_t)(z + 1) * (size_t)width + (size_t)(width - 1)));
-            indices.push_back((GLuint)((size_t)(z + 1) * (size_t)width));
+            // Se todos os 4 cantos estão na área preta descartada, não emite triângulos
+            if (valid_mask[i00] == 0 && valid_mask[i10] == 0 &&
+                valid_mask[i01] == 0 && valid_mask[i11] == 0)
+            {
+                continue;
+            }
+
+            // Dois triângulos com orientação GL_CCW apontando para +Y
+            indices.push_back((GLuint)i00);
+            indices.push_back((GLuint)i01);
+            indices.push_back((GLuint)i10);
+
+            indices.push_back((GLuint)i10);
+            indices.push_back((GLuint)i01);
+            indices.push_back((GLuint)i11);
         }
     }
+
+    printf("Malha do terreno construida: %zu triangulos ativos.\n", indices.size() / 3);
 
     // 4. Configura VAO, VBO único intercalado e EBO na GPU
     GLuint vertex_array_object_id;
@@ -573,12 +647,265 @@ void BuildHeightmapAndAddToVirtualScene(
     theobject.name                   = object_name;
     theobject.first_index            = 0;
     theobject.num_indices            = indices.size();
-    theobject.rendering_mode         = GL_TRIANGLE_STRIP;
+    theobject.rendering_mode         = GL_TRIANGLES;
     theobject.vertex_array_object_id = vertex_array_object_id;
     theobject.bbox_min               = bbox_min;
     theobject.bbox_max               = bbox_max;
 
     g_VirtualScene[object_name] = theobject;
+}
+
+// ----------------------------------------------------------------------------
+// BuildTreeForestAndAddToVirtualScene()
+// Carrega o modelo 3D de árvore (`data/tree.obj`) e a lista de instâncias
+// (`data/terrain/trees.txt`), pré-calculando a matriz Model de cada árvore
+// exclusivamente com `Matrix_Translate`, `Matrix_Rotate_Y` e `Matrix_Scale`
+// de `matrices.h`.
+// Para modelos low-poly (<= 1500 vértices), consolida a floresta em dois
+// batches estáticos (`trees_trunk_batch` e `trees_canopy_batch`) para
+// renderizar milhares de árvores em apenas 2 draw calls!
+// ----------------------------------------------------------------------------
+void BuildTreeForestAndAddToVirtualScene(
+    const char* obj_filename,
+    const char* instances_filename
+)
+{
+    std::ifstream inst_file(instances_filename);
+    if (!inst_file.is_open())
+    {
+        printf("Aviso: Lista de arvores \"%s\" nao encontrada.\n", instances_filename);
+        return;
+    }
+
+    ObjModel treemodel(obj_filename);
+    ComputeNormals(&treemodel);
+    BuildTrianglesAndAddToVirtualScene(&treemodel);
+
+    g_TreeTrunkShapes.clear();
+    g_TreeCanopyShapes.clear();
+    size_t total_triangles_per_tree = 0;
+
+    for (size_t s = 0; s < treemodel.shapes.size(); ++s)
+    {
+        const std::string& sname = treemodel.shapes[s].name;
+        total_triangles_per_tree += treemodel.shapes[s].mesh.num_face_vertices.size();
+        if (sname.find("trunk") != std::string::npos || sname.find("bark") != std::string::npos || sname.find("cau") != std::string::npos)
+            g_TreeTrunkShapes.push_back(sname);
+        else
+            g_TreeCanopyShapes.push_back(sname);
+    }
+
+    g_TreeInstances.clear();
+    std::string line;
+    while (std::getline(inst_file, line))
+    {
+        if (line.empty() || line[0] == '#')
+            continue;
+        std::istringstream iss(line);
+        float wx = 0.0f, wy = 0.0f, wz = 0.0f, scale = 1.0f, yaw = 0.0f;
+        if (!(iss >> wx >> wy >> wz >> scale >> yaw))
+            continue;
+
+        // Ajusta a altura Y exatamente sobre a malha nivelada do terreno
+        wy = GetTerrainHeight(wx, wz);
+
+        // Regra mandatória da disciplina: usar exclusivamente funções de matrices.h
+        glm::mat4 M = Matrix_Translate(wx, wy, wz)
+                    * Matrix_Rotate_Y(yaw)
+                    * Matrix_Scale(scale, scale, scale);
+
+        TreeInstanceData inst;
+        inst.model = M;
+        g_TreeInstances.push_back(inst);
+    }
+
+    if (g_TreeInstances.empty())
+        return;
+
+    // Se o modelo de árvore for low-poly, consolida todas as instâncias em 2 VBOs estáticos
+    if (total_triangles_per_tree <= 600)
+    {
+        g_TreeUseBatchedMesh = true;
+
+        std::vector<TerrainVertex> batch_vertices;
+        std::vector<GLuint>        batch_indices;
+        batch_vertices.reserve(g_TreeInstances.size() * total_triangles_per_tree * 3);
+        batch_indices.reserve(g_TreeInstances.size() * total_triangles_per_tree * 3);
+
+        auto append_part_batch = [&](const std::vector<std::string>& shape_names, const char* batch_obj_name)
+        {
+            size_t first_idx = batch_indices.size();
+            glm::vec3 bbox_min(std::numeric_limits<float>::max());
+            glm::vec3 bbox_max(std::numeric_limits<float>::lowest());
+
+            for (size_t inst_i = 0; inst_i < g_TreeInstances.size(); ++inst_i)
+            {
+                const glm::mat4& M = g_TreeInstances[inst_i].model;
+
+                for (size_t s = 0; s < treemodel.shapes.size(); ++s)
+                {
+                    const std::string& sname = treemodel.shapes[s].name;
+                    bool match = false;
+                    for (const std::string& target : shape_names)
+                    {
+                        if (sname == target) { match = true; break; }
+                    }
+                    if (!match)
+                        continue;
+
+                    size_t num_tri = treemodel.shapes[s].mesh.num_face_vertices.size();
+                    for (size_t t = 0; t < num_tri; ++t)
+                    {
+                        for (size_t v = 0; v < 3; ++v)
+                        {
+                            tinyobj::index_t idx = treemodel.shapes[s].mesh.indices[3 * t + v];
+                            glm::vec4 pos_local(
+                                treemodel.attrib.vertices[3 * idx.vertex_index + 0],
+                                treemodel.attrib.vertices[3 * idx.vertex_index + 1],
+                                treemodel.attrib.vertices[3 * idx.vertex_index + 2],
+                                1.0f
+                            );
+                            glm::vec4 pos_world = M * pos_local;
+
+                            glm::vec4 norm_local(0.0f, 1.0f, 0.0f, 0.0f);
+                            if (idx.normal_index != -1)
+                            {
+                                norm_local = glm::vec4(
+                                    treemodel.attrib.normals[3 * idx.normal_index + 0],
+                                    treemodel.attrib.normals[3 * idx.normal_index + 1],
+                                    treemodel.attrib.normals[3 * idx.normal_index + 2],
+                                    0.0f
+                                );
+                            }
+                            glm::vec4 norm_world = M * norm_local;
+                            float nl = norm(norm_world);
+                            if (nl > 1e-5f)
+                                norm_world /= nl;
+
+                            glm::vec2 uv(0.0f, 0.0f);
+                            if (idx.texcoord_index != -1)
+                            {
+                                uv.x = treemodel.attrib.texcoords[2 * idx.texcoord_index + 0];
+                                uv.y = treemodel.attrib.texcoords[2 * idx.texcoord_index + 1];
+                            }
+
+                            TerrainVertex tv;
+                            tv.position = glm::vec3(pos_world.x, pos_world.y, pos_world.z);
+                            tv.normal   = glm::vec3(norm_world.x, norm_world.y, norm_world.z);
+                            tv.uv       = uv;
+
+                            GLuint new_v_idx = (GLuint)batch_vertices.size();
+                            batch_vertices.push_back(tv);
+                            batch_indices.push_back(new_v_idx);
+
+                            bbox_min.x = std::min(bbox_min.x, tv.position.x);
+                            bbox_min.y = std::min(bbox_min.y, tv.position.y);
+                            bbox_min.z = std::min(bbox_min.z, tv.position.z);
+                            bbox_max.x = std::max(bbox_max.x, tv.position.x);
+                            bbox_max.y = std::max(bbox_max.y, tv.position.y);
+                            bbox_max.z = std::max(bbox_max.z, tv.position.z);
+                        }
+                    }
+                }
+            }
+
+            SceneObject batch_obj;
+            batch_obj.name           = batch_obj_name;
+            batch_obj.first_index    = first_idx;
+            batch_obj.num_indices    = batch_indices.size() - first_idx;
+            batch_obj.rendering_mode = GL_TRIANGLES;
+            batch_obj.bbox_min       = bbox_min;
+            batch_obj.bbox_max       = bbox_max;
+            g_VirtualScene[batch_obj_name] = batch_obj;
+        };
+
+        append_part_batch(g_TreeTrunkShapes,  "trees_trunk_batch");
+        append_part_batch(g_TreeCanopyShapes, "trees_canopy_batch");
+
+        GLuint vao_id, vbo_id, ebo_id;
+        glGenVertexArrays(1, &vao_id);
+        glBindVertexArray(vao_id);
+
+        glGenBuffers(1, &vbo_id);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
+        glBufferData(GL_ARRAY_BUFFER, batch_vertices.size() * sizeof(TerrainVertex), batch_vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, position));
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, normal));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, uv));
+        glEnableVertexAttribArray(2);
+
+        glGenBuffers(1, &ebo_id);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_id);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, batch_indices.size() * sizeof(GLuint), batch_indices.data(), GL_STATIC_DRAW);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        g_VirtualScene["trees_trunk_batch"].vertex_array_object_id  = vao_id;
+        g_VirtualScene["trees_canopy_batch"].vertex_array_object_id = vao_id;
+    }
+    else
+    {
+        g_TreeUseBatchedMesh = false;
+    }
+
+    g_TreeLoaded = true;
+    printf("Floresta 3D carregada: %zu arvores posicionadas no terreno.\n", g_TreeInstances.size());
+}
+
+void DrawTreeForest()
+{
+    if (!g_TreeLoaded)
+        return;
+
+    if (g_TreeUseBatchedMesh)
+    {
+        glm::mat4 identity = Matrix_Identity();
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(identity));
+
+        glUniform1i(g_object_id_uniform, TREE_TRUNK);
+        DrawVirtualObject("trees_trunk_batch");
+
+        glUniform1i(g_object_id_uniform, TREE_CANOPY);
+        DrawVirtualObject("trees_canopy_batch");
+    }
+    else
+    {
+        for (size_t i = 0; i < g_TreeInstances.size(); ++i)
+        {
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(g_TreeInstances[i].model));
+
+            glUniform1i(g_object_id_uniform, TREE_TRUNK);
+            for (const std::string& sname : g_TreeTrunkShapes)
+                DrawVirtualObject(sname.c_str());
+
+            glUniform1i(g_object_id_uniform, TREE_CANOPY);
+            for (const std::string& sname : g_TreeCanopyShapes)
+                DrawVirtualObject(sname.c_str());
+        }
+    }
+}
+
+static std::vector<unsigned char> ResampleRGBNearest(const unsigned char* src, int src_w, int src_h, int dst_w, int dst_h)
+{
+    std::vector<unsigned char> dst((size_t)dst_w * (size_t)dst_h * 3);
+    for (int y = 0; y < dst_h; ++y)
+    {
+        int src_y = std::min(src_h - 1, (int)((size_t)y * (size_t)src_h / (size_t)dst_h));
+        for (int x = 0; x < dst_w; ++x)
+        {
+            int src_x = std::min(src_w - 1, (int)((size_t)x * (size_t)src_w / (size_t)dst_w));
+            size_t dst_idx = ((size_t)y * (size_t)dst_w + (size_t)x) * 3;
+            size_t src_idx = ((size_t)src_y * (size_t)src_w + (size_t)src_x) * 3;
+            dst[dst_idx + 0] = src[src_idx + 0];
+            dst[dst_idx + 1] = src[src_idx + 1];
+            dst[dst_idx + 2] = src[src_idx + 2];
+        }
+    }
+    return dst;
 }
 
 bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mode, bool optional)
@@ -595,7 +922,7 @@ bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mod
     {
         if (optional)
         {
-            printf("NAO ENCONTRADA (opcional, usando textura de solo padrao).\n");
+            printf("NAO ENCONTRADA (opcional).\n");
             return false;
         }
         fprintf(stderr, "ERROR: Cannot open image file \"%s\".\n", filename);
@@ -604,7 +931,6 @@ bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mod
 
     printf("OK (%dx%d).\n", width, height);
 
-    // Verifica se a imagem excede o tamanho máximo de textura 2D suportado pela GPU (GL_MAX_TEXTURE_SIZE)
     GLint max_tex_size = 8192;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
 
@@ -620,21 +946,7 @@ bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mod
         printf("  -> Redimensionando textura gigante (%dx%d) para caber no limite da GPU (%dx%d)...\n",
                width, height, new_w, new_h);
 
-        resized_buffer.resize((size_t)new_w * (size_t)new_h * 3);
-        for (int y = 0; y < new_h; ++y)
-        {
-            int src_y = std::min(height - 1, (int)((size_t)y * (size_t)height / (size_t)new_h));
-            for (int x = 0; x < new_w; ++x)
-            {
-                int src_x = std::min(width - 1, (int)((size_t)x * (size_t)width / (size_t)new_w));
-                size_t dst_idx = ((size_t)y * (size_t)new_w + (size_t)x) * 3;
-                size_t src_idx = ((size_t)src_y * (size_t)width + (size_t)src_x) * 3;
-                resized_buffer[dst_idx + 0] = data[src_idx + 0];
-                resized_buffer[dst_idx + 1] = data[src_idx + 1];
-                resized_buffer[dst_idx + 2] = data[src_idx + 2];
-            }
-        }
-
+        resized_buffer = ResampleRGBNearest(data, width, height, new_w, new_h);
         width       = new_w;
         height      = new_h;
         upload_data = resized_buffer.data();
@@ -647,7 +959,6 @@ bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mod
 
     glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap_mode);
     glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap_mode);
-
     glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -667,6 +978,195 @@ bool LoadTextureImage(const char* filename, bool flip_vertically, GLint wrap_mod
 
     g_NumLoadedTextures += 1;
     return true;
+}
+
+// ----------------------------------------------------------------------------
+// LoadTextureImageRGBA()
+// Carrega mapas de pesos RGBA lineares (como splatmap_0.png e splatmap_1.png)
+// preservando os 4 canais (R, G, B, A) em formato GL_RGBA8 sem distorção sRGB.
+// ----------------------------------------------------------------------------
+bool LoadTextureImageRGBA(const char* filename, bool flip_vertically, GLint wrap_mode, bool optional)
+{
+    printf("Carregando mapa RGBA \"%s\"... ", filename);
+
+    stbi_set_flip_vertically_on_load(flip_vertically);
+    int width = 0, height = 0, channels = 0;
+    unsigned char* data = stbi_load(filename, &width, &height, &channels, 4);
+
+    if (data == NULL)
+    {
+        if (optional)
+        {
+            printf("NAO ENCONTRADO (opcional).\n");
+            return false;
+        }
+        fprintf(stderr, "ERROR: Cannot open RGBA file \"%s\".\n", filename);
+        std::exit(EXIT_FAILURE);
+    }
+
+    printf("OK (%dx%d, 4 canais RGBA).\n", width, height);
+
+    GLuint texture_id;
+    GLuint sampler_id;
+    glGenTextures(1, &texture_id);
+    glGenSamplers(1, &sampler_id);
+
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap_mode);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap_mode);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+    GLuint textureunit = g_NumLoadedTextures;
+    glActiveTexture(GL_TEXTURE0 + textureunit);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindSampler(textureunit, sampler_id);
+
+    stbi_image_free(data);
+
+    g_NumLoadedTextures += 1;
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// LoadTextureArray()
+// Carrega N imagens RGB (sRGB) como camadas de um único GL_TEXTURE_2D_ARRAY,
+// garantindo o mesmo tamanho de camada via reamostragem quando necessário.
+// ----------------------------------------------------------------------------
+static bool LoadTextureArray(const std::vector<std::string>& filenames, bool flip_vertically, GLint wrap_mode, bool optional)
+{
+    if (filenames.empty())
+        return false;
+
+    GLint max_tex_size = 8192;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
+
+    stbi_set_flip_vertically_on_load(flip_vertically);
+
+    int layer_w = 0;
+    int layer_h = 0;
+    struct LayerPixels
+    {
+        int w;
+        int h;
+        unsigned char* raw;
+        LayerPixels(int w_, int h_, unsigned char* raw_) : w(w_), h(h_), raw(raw_) {}
+    };
+    std::vector<LayerPixels> loaded;
+    loaded.reserve(filenames.size());
+
+    auto free_loaded = [&]() {
+        for (auto& lp : loaded)
+        {
+            if (lp.raw)
+                stbi_image_free(lp.raw);
+        }
+    };
+
+    for (size_t i = 0; i < filenames.size(); ++i)
+    {
+        printf("Carregando camada[%zu] de Texture2DArray \"%s\"... ", i, filenames[i].c_str());
+        int w = 0, h = 0, channels = 0;
+        unsigned char* data = stbi_load(filenames[i].c_str(), &w, &h, &channels, 3);
+        if (data == NULL)
+        {
+            if (optional)
+            {
+                printf("NAO ENCONTRADA (opcional).\n");
+                free_loaded();
+                return false;
+            }
+            fprintf(stderr, "ERROR: Cannot open texture array layer \"%s\".\n", filenames[i].c_str());
+            free_loaded();
+            std::exit(EXIT_FAILURE);
+        }
+        printf("OK (%dx%d).\n", w, h);
+
+        if (i == 0)
+        {
+            layer_w = std::min(w, (int)max_tex_size);
+            layer_h = std::min(h, (int)max_tex_size);
+        }
+        loaded.push_back({w, h, data});
+    }
+
+    GLuint texture_id = 0;
+    GLuint sampler_id = 0;
+    glGenTextures(1, &texture_id);
+    glGenSamplers(1, &sampler_id);
+
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap_mode);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap_mode);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+    GLuint textureunit = g_NumLoadedTextures;
+    glActiveTexture(GL_TEXTURE0 + textureunit);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texture_id);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_SRGB8, layer_w, layer_h, (GLsizei)loaded.size(), 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+
+    std::vector<unsigned char> resized;
+    for (size_t i = 0; i < loaded.size(); ++i)
+    {
+        const unsigned char* src_ptr = loaded[i].raw;
+        if (loaded[i].w != layer_w || loaded[i].h != layer_h)
+        {
+            resized = ResampleRGBNearest(loaded[i].raw, loaded[i].w, loaded[i].h, layer_w, layer_h);
+            src_ptr = resized.data();
+        }
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, (GLint)i, layer_w, layer_h, 1, GL_RGB, GL_UNSIGNED_BYTE, src_ptr);
+    }
+
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    glBindSampler(textureunit, sampler_id);
+
+    free_loaded();
+    g_NumLoadedTextures += 1;
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// LoadTerrainTextures()
+// Carrega os Splatmaps RGBA (3-4), Macro Albedo (5), o Texture2DArray dos
+// 8 materiais placeholder do terreno (6) e texturas de árvore (7-8).
+// ----------------------------------------------------------------------------
+void LoadTerrainTextures()
+{
+    bool ok0 = LoadTextureImageRGBA("../../../data/terrain/splatmap_0.png", false, GL_CLAMP_TO_EDGE, true); // Unit 3
+    bool ok1 = LoadTextureImageRGBA("../../../data/terrain/splatmap_1.png", false, GL_CLAMP_TO_EDGE, true); // Unit 4
+    bool ok2 = LoadTextureImage("../../../data/terrain/macro_albedo.png",   false, GL_CLAMP_TO_EDGE, true); // Unit 5
+
+    std::vector<std::string> material_layers = {
+        "../../../data/terrain/mat_0_asphalt_main.png", // Layer 0: Asfalto Principal
+        "../../../data/terrain/mat_1_asphalt_sec.png",  // Layer 1: Asfalto Secundário / Concreto
+        "../../../data/terrain/mat_2_sidewalk.png",     // Layer 2: Calçadas / Meio-fio
+        "../../../data/terrain/mat_3_grass.png",        // Layer 3: Grama Aberta
+        "../../../data/terrain/mat_4_forest.png",       // Layer 4: Solo de Mata
+        "../../../data/terrain/mat_5_dirt.png",         // Layer 5: Terra Exposta / Taludes
+        "../../../data/terrain/mat_6_water.png",        // Layer 6: Água (textura estática placeholder)
+        "../../../data/terrain/mat_7_building.png"      // Layer 7: Fundação / Base de Prédios
+    };
+    bool ok3 = LoadTextureArray(material_layers, true, GL_REPEAT, true); // Unit 6
+
+    bool ok4 = LoadTextureImage("../../../data/terrain/tree_bark.png",    true, GL_REPEAT, true); // Unit 7
+    bool ok5 = LoadTextureImage("../../../data/terrain/tree_foliage.png", true, GL_REPEAT, true); // Unit 8
+
+    g_HasTerrainSplatmaps = (ok0 && ok1 && ok2 && ok3 && ok4 && ok5);
+
+    glUseProgram(g_GpuProgramID);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_terrain_splatmaps"), g_HasTerrainSplatmaps ? 1 : 0);
+    glUseProgram(0);
 }
 
 void LoadShader(const char* filename, GLuint shader_id)
@@ -789,9 +1289,16 @@ void LoadShadersFromFiles()
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
 
     glUseProgram(g_GpuProgramID);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"), 1);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"), 2);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), g_HasSatelliteTexture ? 1 : 0);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"),      0);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"),      1);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"),      2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TerrainSplat0"),      3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TerrainSplat1"),      4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TerrainMacroAlbedo"), 5);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TerrainMaterials"),   6);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TreeBarkTex"),        7);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TreeFoliageTex"),     8);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), (g_HasSatelliteTexture && g_SatelliteTerrainMode) ? 1 : 0);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_terrain_splatmaps"), g_HasTerrainSplatmaps ? 1 : 0);
     glUseProgram(0);
 }

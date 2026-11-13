@@ -125,12 +125,19 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1 (detalhe do solo)
 
     // Textura de satélite do Campus do Vale (TextureImage2):
-    // Carregada com flip_vertically = false e GL_CLAMP_TO_EDGE para alinhar 1:1 com vale.png.
+    // Carregada com flip_vertically = false e GL_CLAMP_TO_EDGE para alinhar 1:1 com vale.png (alternada via F10).
     g_HasSatelliteTexture = LoadTextureImage("../../../data/satelite_2012_low.png", false, GL_CLAMP_TO_EDGE, true);
 
+    // Carrega os splatmaps multi-material (8 canais), macro_albedo 4K e texturas de detalhe/árvores
+    LoadTerrainTextures();
+
     // Gera a malha de terreno do Campus do Vale em escala real (1px = 1.0m, 33.0m a 137.043m, UV 0..1)
-    BuildHeightmapAndAddToVirtualScene("../../../data/vale.png", "terrain", 1.0f, 33.0f, 104.043f, 1.0f);
+    // descartando as regiões em preto de bruto_2012_mascara.tiff
+    BuildHeightmapAndAddToVirtualScene("../../../data/vale_processed.png", "terrain", 1.0f, 33.0f, 104.043f, 1.0f);
     g_Bus.position.y = GetTerrainHeight(g_Bus.position.x, g_Bus.position.z);
+
+    // Carrega o modelo 3D placeholder de árvore e instancia a floresta no terreno
+    BuildTreeForestAndAddToVirtualScene("../../../data/tree.obj", "../../../data/terrain/trees.txt");
 
     // Carregamos a malha tridimensional complexa do ônibus Mascarello Gran Midi
     ObjModel branquinhomodel("../../../data/branquinho.obj");
@@ -187,11 +194,12 @@ int main(int argc, char* argv[])
         // Atualiza a posição e direção dos faróis frontais conforme o estágio (L) e luz alta separada (P)
         g_Lighting.UpdateBusHeadlights(g_Bus.GetModelMatrix(), g_Bus.yaw, g_Bus.headlight_state, g_Bus.IsHighBeamActive());
 
-        // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader
-        // No modo de câmera livre (F11), desativa a névoa e ativa a textura de satélite do Campus do Vale
-        bool is_free_cam = (g_Camera.mode == Camera::Free);
-        g_Lighting.ApplyUniforms(g_GpuProgramID, !is_free_cam);
-        glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), (g_HasSatelliteTexture && is_free_cam) ? 1 : 0);
+        // Envia parâmetros do Sol, postes e faróis do ônibus para o Fragment Shader.
+        // F11 ativa câmera livre sem alterar o terreno; F10 alterna o terreno entre modo jogável e satélite.
+        bool is_free_cam       = (g_Camera.mode == Camera::Free);
+        bool is_satellite_mode = (g_HasSatelliteTexture && g_SatelliteTerrainMode);
+        g_Lighting.ApplyUniforms(g_GpuProgramID, !is_free_cam && !is_satellite_mode);
+        glUniform1i(glGetUniformLocation(g_GpuProgramID, "has_satellite_texture"), is_satellite_mode ? 1 : 0);
 
         // Computamos as matrizes View e Projection através do módulo Camera
         glm::mat4 view = g_Camera.ComputeViewMatrix(g_Bus);
@@ -203,11 +211,14 @@ int main(int argc, char* argv[])
         // Renderiza ônibus depois de atualizar a câmera
         g_Bus.Draw(branquinhomodel);
 
-        // Renderiza o terreno de teste
+        // Renderiza o terreno multi-material do Campus do Vale
         glm::mat4 model = Matrix_Translate(0.0f, 0.0f, 0.0f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("terrain");
+
+        // Renderiza as árvores 3D instanciadas no terreno
+        DrawTreeForest();
 
         // Renderiza todos os postes de iluminação e suas lâmpadas superiores
         g_Lighting.DrawLightPoles();
@@ -296,7 +307,21 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_Camera.ToggleCameraMode();
     }
 
-    // Tecla F11 ativa/desativa a câmera livre para debugar o terreno
+    // Tecla F10 alterna o terreno entre o modo jogável (multi-material) e a imagem de satélite
+    if (key == GLFW_KEY_F10 && action == GLFW_PRESS)
+    {
+        if (g_HasSatelliteTexture)
+        {
+            g_SatelliteTerrainMode = !g_SatelliteTerrainMode;
+            printf("Terreno: %s\n", g_SatelliteTerrainMode ? "Imagem de satelite (F10)" : "Modo jogavel (F10)");
+        }
+        else
+        {
+            printf("Terreno: satelite_2012_low.png nao encontrada.\n");
+        }
+    }
+
+    // Tecla F11 ativa/desativa apenas a câmera livre, sem alterar o terreno
     if (key == GLFW_KEY_F11 && action == GLFW_PRESS){
         g_Bus.keyW = g_Bus.keyA = g_Bus.keyS = g_Bus.keyD = false;
         g_Camera.ToggleFreeCamera(g_Bus.position);

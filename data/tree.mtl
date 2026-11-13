@@ -1,0 +1,14 @@
+# Placeholder Tree Material - Branquinho Simulator
+newmtl tree_bark
+Ka 0.35 0.26 0.19
+Kd 0.42 0.31 0.22
+Ks 0.04 0.04 0.04
+Ns 8.0
+map_Kd terrain/tree_bark.png
+
+newmtl tree_foliage
+Ka 0.24 0.40 0.18
+Kd 0.30 0.48 0.22
+Ks 0.05 0.05 0.05
+Ns 12.0
+map_Kd terrain/tree_foliage.png
