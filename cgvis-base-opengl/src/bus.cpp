@@ -31,9 +31,16 @@ Bus::Bus(){
     direction = 0.0f;
     wheel_angle = 0.0f;
     turn = 0;
+    K_suspension = 8.0f;
+    air_resistance = 0.002f;
+    rolling_resistance = 0.5f;
+    engine_power = 2.0f;
 
     // Physics
     speed = 0.0f;
+    steering_target = 0.0f;
+    steering_angle = 0.0f;
+    steering_rate = 5.0f;
     pitch = 0.0f;
     yaw = 0.0f;
     roll = 0.0f;
@@ -145,9 +152,8 @@ void Bus::UpdatePos(double deltaT){
     else            direction = 0.0f;
 
     // Calculate speed
-    // TODO: remove hardcoded magic numbers
-    speed += direction * 4.0f * deltaT; // 2.0f = engine power
-    float drag = (speed * speed * 0.02f + 0.2f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
+    speed += direction * engine_power * deltaT;
+    float drag = (speed * speed * air_resistance + rolling_resistance) * deltaT;
 
     // apply drag against speed (positive if going backwards)
     if (speed > 0) speed -= drag;
@@ -182,9 +188,9 @@ void Bus::UpdatePos(double deltaT){
     // Calculate pitch and roll targets
     pitch_target = atan2(height_avg_front - height_avg_rear, wheel_base);
     roll_target  = atan2(height_avg_right - height_avg_left, track_width);
-    // Calculate actual pitch and roll
-    pitch += (pitch_target - pitch) * std::min(1.0, 8.0 * deltaT); // TODO: magic number 8.0 = suspension damping coef
-    roll  += (roll_target  - roll)  * std::min(1.0, 8.0 * deltaT); // TODO: magic number 8.0 = suspension damping coef
+    // Calculate actual pitch and roll with damping
+    pitch += (pitch_target - pitch) * std::min(1.0, K_suspension * deltaT);
+    roll  += (roll_target  - roll)  * std::min(1.0, K_suspension * deltaT);
 
     // Update wheel rotation
     auto wheel_obj = g_VirtualScene["wheel_rr"];
@@ -200,8 +206,13 @@ void Bus::UpdatePos(double deltaT){
     position.y = GetTerrainHeight(position.x, position.z);
     position.w = 1.0f;
 
+    // Update steering angle
+    steering_target = glm::clamp(turn * (3.0f/std::abs(speed + 1.0f)), -0.6f, 0.6f);
+    float alpha = 1.0f - std::exp(-steering_rate * deltaT);
+    steering_angle += (steering_target - steering_angle) * alpha;
+
     // Update angle (only while moving, invert if reversing)
-    yaw += turn * speed * 0.2f * deltaT;
+    yaw += speed * std::tan(steering_angle) / wheel_base * deltaT;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
@@ -245,7 +256,7 @@ void Bus::Draw(ObjModel& model)
             // Aplica rotação
             new_model_mat = model_mat 
                           * Matrix_Translate(wheel_c.x, wheel_c.y, wheel_c.z)
-                          * Matrix_Rotate_Y(turn * 0.6f) // TODO: magic number = steering angle
+                          * Matrix_Rotate_Y(steering_angle)
                           * Matrix_Rotate_X(-wheel_angle)
                           * Matrix_Translate(-wheel_c.x, -wheel_c.y, -wheel_c.z);
         }

@@ -21,9 +21,16 @@ public:
     float direction;
     float wheel_angle;
     int turn;
+    float K_suspension;
+    float air_resistance;
+    float rolling_resistance;
+    float engine_power;
     
     // Physics
     float speed;
+    float steering_target;
+    float steering_angle;
+    float steering_rate;
     float pitch, yaw, roll;
     float pitch_target, yaw_target, roll_target;
 
