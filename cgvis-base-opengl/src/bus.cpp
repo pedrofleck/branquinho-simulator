@@ -158,7 +158,9 @@ void Bus::UpdatePos(double deltaT){
     yaw += turn * speed * 0.2f * deltaT;
 
     // Update wheel rotation
-    wheel_angle += (speed * deltaT) / 0.53f; // TODO: magic number = wheel diameter
+    auto wheel_obj = g_VirtualScene["wheel_rr"];
+    const float wheel_radius = (wheel_obj.bbox_max.y - wheel_obj.bbox_min.y) / 2.0f;
+    wheel_angle += (speed * deltaT) / wheel_radius;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
