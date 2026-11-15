@@ -30,6 +30,8 @@ Bus::Bus(){
     forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     yaw = 0.0f;
     direction = 0.0f;
+    wheel_angle = 0.0f;
+    turn = 0;
 
     // Physics
     speed = 0.0f;
@@ -141,7 +143,7 @@ void Bus::UpdatePos(double deltaT){
     if (std::abs(speed) <= drag) speed = 0;
 
     // Calculate turning rate/direction
-    int turn = keyA - keyD;
+    turn = keyA - keyD;
 
     // Forward vector
     glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
@@ -154,6 +156,9 @@ void Bus::UpdatePos(double deltaT){
 
     // Update angle (only while moving, invert if reversing)
     yaw += turn * speed * 0.2f * deltaT;
+
+    // Update wheel rotation
+    wheel_angle += (speed * deltaT) / 0.53f; // TODO: magic number = wheel diameter
 }
 
 glm::mat4 Bus::GetModelMatrix() const
@@ -166,12 +171,42 @@ glm::mat4 Bus::GetModelMatrix() const
 void Bus::Draw(ObjModel& model)
 {
     glm::mat4 model_mat = GetModelMatrix();
-    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model_mat));
-
+    
     // Desenha todas as partes que compõem o modelo .obj
     for (size_t s = 0; s < model.shapes.size(); ++s)
     {
         const std::string& shape_name = model.shapes[s].name;
+        glm::mat4 new_model_mat;
+
+        // Rodas traseiras
+        if (shape_name == "wheel_rr" || shape_name == "wheel_rl"){
+            // Encontra centro das rodas
+            auto wheel_obj = g_VirtualScene[shape_name];
+            auto wheel_c = (wheel_obj.bbox_max + wheel_obj.bbox_min) / 2.0f;
+
+            // Aplica rotação
+            new_model_mat = model_mat 
+                          * Matrix_Translate(wheel_c.x, wheel_c.y, wheel_c.z)
+                          * Matrix_Rotate_X(-wheel_angle)
+                          * Matrix_Translate(-wheel_c.x, -wheel_c.y, -wheel_c.z);
+        }
+        
+        // Rodas dianteiras
+        else if (shape_name == "wheel_fr" || shape_name == "wheel_fl"){
+            // Encontra centro das rodas
+            auto wheel_obj = g_VirtualScene[shape_name];
+            auto wheel_c = (wheel_obj.bbox_max + wheel_obj.bbox_min) / 2.0f;
+            
+            // Aplica rotação
+            new_model_mat = model_mat 
+                          * Matrix_Translate(wheel_c.x, wheel_c.y, wheel_c.z)
+                          * Matrix_Rotate_Y(turn * 0.6f) // TODO: magic number = steering angle
+                          * Matrix_Rotate_X(-wheel_angle)
+                          * Matrix_Translate(-wheel_c.x, -wheel_c.y, -wheel_c.z);
+        }
+        else new_model_mat = model_mat;
+        
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(new_model_mat));
 
         // 1. Luz menor do meio (_tex_electric__emissive_ em ±0.96, 1.12):
         //    acende ao apertar L 1 vez (estágio 1) e continua acesa no estágio 2

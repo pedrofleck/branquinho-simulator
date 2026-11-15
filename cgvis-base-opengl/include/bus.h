@@ -19,6 +19,8 @@ public:
     glm::vec4 position;
     glm::vec3 scale;
     glm::vec4 forward_local;
+    float wheel_angle;
+    int turn;
 
     // Physics
     float speed;
