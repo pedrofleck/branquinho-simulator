@@ -28,7 +28,9 @@ Bus::Bus(){
     position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     scale = glm::vec3(1.0f, 1.0f, 1.0f);
     forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+    pitch = 0.0f;
     yaw = 0.0f;
+    roll = 0.0f;
     direction = 0.0f;
     wheel_angle = 0.0f;
     turn = 0;
@@ -48,7 +50,6 @@ Bus::Bus(){
     high_beam_press_time  = 0.0;
 }
 
-// TODO: fix holding key bug
 void Bus::OnKey(int key, int action){
     bool isPressed = false;
     if (action == GLFW_PRESS || action == GLFW_REPEAT) isPressed = true;
@@ -110,8 +111,18 @@ void Bus::OnKey(int key, int action){
             high_beam_ignore_hold = false;
         }
     }
+}
 
-    // printf("Bus::OnKey %d %d\n", key, action);
+float Bus::GetTerrainHeightAtWheel(SceneObject wheel){
+    // Get global coord of wheel
+    auto wheel_center_local = (wheel.bbox_max + wheel.bbox_min) / 2.0f;
+    auto wheel_center_local_w = glm::vec4(wheel_center_local.x, wheel_center_local.y, wheel_center_local.z, 0.0f);
+    auto wheel_center_global = position + Matrix_Rotate_Y(yaw) * wheel_center_local_w;
+
+    // Get height at wheel
+    float wheel_height = GetTerrainHeight(wheel_center_global.x, wheel_center_global.z);
+
+    return wheel_height;
 }
 
 void Bus::UpdatePos(double deltaT){
@@ -132,8 +143,8 @@ void Bus::UpdatePos(double deltaT){
 
     // Calculate speed
     // TODO: remove hardcoded magic numbers
-    speed += direction * 2.0f * deltaT; // 2.0f = engine power
-    float drag = (speed * speed * 0.1f + 0.5f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
+    speed += direction * 4.0f * deltaT; // 2.0f = engine power
+    float drag = (speed * speed * 0.02f + 0.2f)  * deltaT; // 0.1f = air resistance, 0.5f = rolling resistance
 
     // apply drag against speed (positive if going backwards)
     if (speed > 0) speed -= drag;
@@ -144,6 +155,35 @@ void Bus::UpdatePos(double deltaT){
 
     // Calculate turning rate/direction
     turn = keyA - keyD;
+
+    // Bus orientation
+    // Get wheel objects
+    auto wheel_fl = g_VirtualScene["wheel_fl"];
+    auto wheel_fr = g_VirtualScene["wheel_fr"];
+    auto wheel_rl = g_VirtualScene["wheel_rl"];
+    auto wheel_rr = g_VirtualScene["wheel_rr"];
+    // Get terrain height at each wheel
+    float height_fl = GetTerrainHeightAtWheel(wheel_fl);
+    float height_fr = GetTerrainHeightAtWheel(wheel_fr);
+    float height_rl = GetTerrainHeightAtWheel(wheel_rl);
+    float height_rr = GetTerrainHeightAtWheel(wheel_rr);
+    // Get average heights
+    float height_avg_front = (height_fl + height_fr) / 2.0f;
+    float height_avg_rear = (height_rl + height_rr) / 2.0f;
+    float height_avg_left = (height_rl + height_fl) / 2.0f;
+    float height_avg_right = (height_fr + height_rr) / 2.0f;
+
+    const float wheel_base = 5.6f;   // TODO: magic number = wheel base (distance between rear and front axles)
+    const float track_width = 2.16f; // TODO: magic number = track width (distance between left and right wheels)
+
+    // Calculate pitch and roll
+    pitch = atan2(height_avg_front - height_avg_rear, wheel_base);
+    roll = atan2(height_avg_right - height_avg_left, track_width);
+
+    // Update wheel rotation
+    auto wheel_obj = g_VirtualScene["wheel_rr"];
+    const float wheel_radius = (wheel_obj.bbox_max.y - wheel_obj.bbox_min.y) / 2.0f;
+    wheel_angle += (speed * deltaT) / wheel_radius;
 
     // Forward vector
     glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
@@ -156,17 +196,14 @@ void Bus::UpdatePos(double deltaT){
 
     // Update angle (only while moving, invert if reversing)
     yaw += turn * speed * 0.2f * deltaT;
-
-    // Update wheel rotation
-    auto wheel_obj = g_VirtualScene["wheel_rr"];
-    const float wheel_radius = (wheel_obj.bbox_max.y - wheel_obj.bbox_min.y) / 2.0f;
-    wheel_angle += (speed * deltaT) / wheel_radius;
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
     return Matrix_Translate(position.x, position.y, position.z)
          * Matrix_Rotate_Y(yaw)
+         * Matrix_Rotate_X(pitch)
+         * Matrix_Rotate_Z(roll)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }
 

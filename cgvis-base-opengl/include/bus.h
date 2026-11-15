@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 
 struct ObjModel;    // declaração antecipada no lugar de #include "scene.h"
+struct SceneObject; // declaração antecipada no lugar de #include "scene.h"
 
 // Classe que encapsula o estado e a renderização do ônibus
 class Bus
@@ -14,11 +15,11 @@ public:
     Bus();
 
     // Data
-    float yaw;
-    float direction;
     glm::vec4 position;
     glm::vec3 scale;
     glm::vec4 forward_local;
+    float pitch, yaw, roll;
+    float direction;
     float wheel_angle;
     int turn;
 
@@ -47,8 +48,13 @@ public:
     // Retorna true se o farol separado de luz alta estiver ativo (piscando ou travado aceso)
     bool IsHighBeamActive() const { return high_beam_held || high_beam_latched; }
 
+    // Retorna altura do terreno na roda
+    float GetTerrainHeightAtWheel(SceneObject wheel);
+
     // Atualiza a posição do ônibus
     void UpdatePos(const double deltaT);
+
+    // Atualiza teclas
     void OnKey(int key, int action);
 
     // Retorna a matriz Model computada via matrices.h
