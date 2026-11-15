@@ -28,15 +28,18 @@ Bus::Bus(){
     position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     scale = glm::vec3(1.0f, 1.0f, 1.0f);
     forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
-    pitch = 0.0f;
-    yaw = 0.0f;
-    roll = 0.0f;
     direction = 0.0f;
     wheel_angle = 0.0f;
     turn = 0;
 
     // Physics
     speed = 0.0f;
+    pitch = 0.0f;
+    yaw = 0.0f;
+    roll = 0.0f;
+    pitch_target = 0.0f;
+    yaw_target = 0.0f;
+    roll_target = 0.0f;
 
     // Keys & Headlights
     keyW = false;
@@ -169,16 +172,19 @@ void Bus::UpdatePos(double deltaT){
     float height_rr = GetTerrainHeightAtWheel(wheel_rr);
     // Get average heights
     float height_avg_front = (height_fl + height_fr) / 2.0f;
-    float height_avg_rear = (height_rl + height_rr) / 2.0f;
-    float height_avg_left = (height_rl + height_fl) / 2.0f;
+    float height_avg_rear  = (height_rl + height_rr) / 2.0f;
+    float height_avg_left  = (height_rl + height_fl) / 2.0f;
     float height_avg_right = (height_fr + height_rr) / 2.0f;
 
-    const float wheel_base = 5.6f;   // TODO: magic number = wheel base (distance between rear and front axles)
+    const float wheel_base  = 5.6f;   // TODO: magic number = wheel base (distance between rear and front axles)
     const float track_width = 2.16f; // TODO: magic number = track width (distance between left and right wheels)
 
-    // Calculate pitch and roll
-    pitch = atan2(height_avg_front - height_avg_rear, wheel_base);
-    roll = atan2(height_avg_right - height_avg_left, track_width);
+    // Calculate pitch and roll targets
+    pitch_target = atan2(height_avg_front - height_avg_rear, wheel_base);
+    roll_target  = atan2(height_avg_right - height_avg_left, track_width);
+    // Calculate actual pitch and roll
+    pitch += (pitch_target - pitch) * std::min(1.0, 8.0 * deltaT); // TODO: magic number 8.0 = suspension damping coef
+    roll  += (roll_target  - roll)  * std::min(1.0, 8.0 * deltaT); // TODO: magic number 8.0 = suspension damping coef
 
     // Update wheel rotation
     auto wheel_obj = g_VirtualScene["wheel_rr"];

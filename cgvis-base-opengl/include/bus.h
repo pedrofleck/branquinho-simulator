@@ -18,13 +18,14 @@ public:
     glm::vec4 position;
     glm::vec3 scale;
     glm::vec4 forward_local;
-    float pitch, yaw, roll;
     float direction;
     float wheel_angle;
     int turn;
-
+    
     // Physics
     float speed;
+    float pitch, yaw, roll;
+    float pitch_target, yaw_target, roll_target;
 
     // Keys
     bool keyW;
