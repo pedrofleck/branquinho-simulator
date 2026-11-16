@@ -203,11 +203,11 @@ void Bus::UpdatePos(double deltaT){
     // Update position
     position += forward * speed * (float)deltaT;
     // Código novo para manter o ônibus tocando o relevo do terreno
-    position.y = GetTerrainHeight(position.x, position.z);
+    position.y = height_avg_rear;
     position.w = 1.0f;
 
     // Update steering angle
-    steering_target = glm::clamp(turn * (3.0f/std::abs(speed + 1.0f)), -0.6f, 0.6f);
+    steering_target = glm::clamp(turn * 3.0f / (std::abs(speed) + 1.0f), -0.6f, 0.6f);
     float alpha = 1.0f - std::exp(-steering_rate * deltaT);
     steering_angle += (steering_target - steering_angle) * alpha;
 
