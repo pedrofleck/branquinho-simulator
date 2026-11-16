@@ -18,6 +18,7 @@ public:
     glm::vec4 position;
     glm::vec3 scale;
     glm::vec4 forward_local;
+    glm::vec4 up_local;
     float direction;
     float wheel_angle;
     int turn;

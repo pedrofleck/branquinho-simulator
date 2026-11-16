@@ -173,9 +173,13 @@ glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
         camera_view_vector = camera_lookat_l - camera_position_c;
     // Câmera bumper
     } else if (mode == Bumper){
-        camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        const glm::mat4 bus_orientation = Matrix_Rotate_Y(bus.yaw)
+                                        * Matrix_Rotate_X(bus.pitch)
+                                        * Matrix_Rotate_Z(bus.roll);
+
         camera_position_c = bus.GetModelMatrix() * bumper_offset_local;
-        camera_view_vector = Matrix_Rotate_Y(bus.yaw) * bus.forward_local;
+        camera_view_vector = bus_orientation * bus.forward_local;
+        camera_up_vector   = bus_orientation * bus.up_local;
     // Câmera livre
     } else if (mode == Free){
         camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);

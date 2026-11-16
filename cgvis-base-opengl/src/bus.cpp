@@ -32,6 +32,7 @@ Bus::Bus(){
     position = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     scale = glm::vec3(1.0f, 1.0f, 1.0f);
     forward_local = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+    up_local = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     direction = 0.0f;
     wheel_angle = 0.0f;
     turn = 0;
