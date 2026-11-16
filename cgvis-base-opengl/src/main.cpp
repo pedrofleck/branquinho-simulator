@@ -324,7 +324,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Tecla F11 ativa/desativa apenas a câmera livre, sem alterar o terreno
     if (key == GLFW_KEY_F11 && action == GLFW_PRESS){
         g_Bus.keyW = g_Bus.keyA = g_Bus.keyS = g_Bus.keyD = false;
-        g_Camera.ToggleFreeCamera(g_Bus.position);
+        g_Camera.ToggleFreeCamera(g_Bus.GetCenterGlobal());
     }
 
     // ESC fecha a janela da aplicação

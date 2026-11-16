@@ -67,3 +67,9 @@ PROMPT: Implemente o carregamento direto do mapa topográfico data/vale.png em P
 # Implementação de suspensão no ônibus
 
 PROMPT: Temos uma implementação primitiva de uma suspensão no ônibus, mas as rodas não acompanham o terreno. Implemente um modelo de suspensão com parâmetros ajustáveis.
+
+---
+
+# Modificar centro da câmera look-at
+
+PROMPT: Atualmente a câmera orbita o eixo traseiro do ônibus, que é a sua origem. Mova o centro da câmera Orbit para o meio do ônibus.

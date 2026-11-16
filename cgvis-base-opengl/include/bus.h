@@ -92,6 +92,9 @@ public:
     // Retorna a matriz Model computada via matrices.h
     glm::mat4 GetModelMatrix() const;
 
+    // Ponto central do ônibus em coordenadas de mundo (alvo da câmera orbital)
+    glm::vec4 GetCenterGlobal() const;
+
     // Renderiza todas as malhas do ônibus
     void Draw(ObjModel& model);
 };

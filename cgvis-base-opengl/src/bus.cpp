@@ -335,6 +335,18 @@ glm::mat4 Bus::GetModelMatrix() const
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }
 
+glm::vec4 Bus::GetCenterGlobal() const
+{
+    // Meio do entre-eixos (body_pivot_z, já em unidades de mundo), a ~1.5 m de altura,
+    // no referencial do ônibus. Só yaw: pitch/roll fariam a câmera balançar com a suspensão.
+    // Como é reconstruído a partir do eixo traseiro + yaw, este ponto descreve um arco
+    // em torno do eixo traseiro nas curvas, como o meio de um ônibus real.
+    glm::vec4 center_local = glm::vec4(0.0f, 1.5f * scale.y, body_pivot_z + 1.0f, 0.0f);
+    glm::vec4 center = position + Matrix_Rotate_Y(yaw) * center_local;
+    center.w = 1.0f;
+    return center;
+}
+
 void Bus::Draw(ObjModel& model)
 {
     glm::mat4 model_mat = GetModelMatrix();

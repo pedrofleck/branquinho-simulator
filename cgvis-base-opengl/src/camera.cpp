@@ -32,7 +32,7 @@ Camera g_Camera;
 Camera::Camera(){
     theta = 0.0f;
     phi = 0.35f;
-    distance = 6.0f;
+    distance = 12.0f;
     use_perspective = true;
     screen_ratio = 1.0f;
     nearplane = -0.1f;
@@ -101,7 +101,7 @@ void Camera::OnScroll(double xoffset, double yoffset)
     // Só executa se câmera estiver em Orbit
     if (mode != Orbit) return;
 
-    distance -= 0.1f * (float)yoffset;
+    distance -= 0.4f * (float)yoffset;
 
     const float verysmallnumber = std::numeric_limits<float>::epsilon();
     if (distance < verysmallnumber)
@@ -167,9 +167,9 @@ glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
         x = r * std::cos(phi) * std::sin(theta);
     
         camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-        camera_position_c  = bus.position + glm::vec4(x, y, z, 0.0f);
+        glm::vec4 camera_lookat_l = bus.GetCenterGlobal();
+        camera_position_c  = camera_lookat_l + glm::vec4(x, y, z, 0.0f);
         camera_position_c.w = 1.0f;
-        glm::vec4 camera_lookat_l = bus.position;
         camera_view_vector = camera_lookat_l - camera_position_c;
     // Câmera bumper
     } else if (mode == Bumper){
