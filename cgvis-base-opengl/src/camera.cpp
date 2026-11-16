@@ -43,7 +43,7 @@ Camera::Camera(){
     last_cursor_y = 0.0;
     mode = Orbit;
     previous_mode = Orbit;
-    bumper_offset_local = glm::vec4(0.0f, 0.7f, -8.3f, 1.0f);
+    bumper_offset_local = glm::vec4(0.0f, 1.6f, -8.0f, 1.0f);
     free_position = glm::vec4(0.0f, 5.0f, 8.0f, 1.0f);
     keyW = false;
     keyA = false;
