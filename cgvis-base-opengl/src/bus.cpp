@@ -4,9 +4,11 @@
 // Responsável pelo estado do veículo na cena (posição, escala e, futuramente,
 // orientação/velocidade) e pela composição da sua matriz Model:
 //
-//     M_bus = Translate(pos) * Rotate_Y(yaw) * Scale(s)
+//     M_bus = Translate(pos) * Rotate_Y(yaw) * Translate(pivot) * Rotate_X(pitch)
+//           * Rotate_Z(roll) * Translate(-pivot) * Scale(s)
 //
-// Modelo exportado do Blender em .obj usando Y up e -Z forward
+// Modelo exportado do Blender em .obj usando Y up e -Z forward.
+// A origem do modelo fica no eixo traseiro, ao nível do chão (base das rodas).
 // Também desenha todas as shapes do ObjModel do ônibus
 // enviando a matriz Model e o object_id BUS para os shaders.
 //
@@ -16,6 +18,8 @@
 #include "bus.h"
 
 #include <cstdio>
+#include <cmath>
+#include <algorithm>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -31,7 +35,6 @@ Bus::Bus(){
     direction = 0.0f;
     wheel_angle = 0.0f;
     turn = 0;
-    K_suspension = 8.0f;
     air_resistance = 0.002f;
     rolling_resistance = 0.5f;
     engine_power = 2.0f;
@@ -47,6 +50,28 @@ Bus::Bus(){
     pitch_target = 0.0f;
     yaw_target = 0.0f;
     roll_target = 0.0f;
+
+    // Suspensão
+    heave        = 0.0f;
+    heave_target = 0.0f;
+    heave_vel    = 0.0f;
+    pitch_vel    = 0.0f;
+    roll_vel     = 0.0f;
+    pivot_fraction = 0.5f;  // meio do entre-eixos
+    body_pivot_z = 0.0f;
+    heave_omega  = 16.0f;
+    heave_zeta   = 0.65f;
+    body_omega   = 14.0f;
+    body_zeta    = 0.6f;
+    squat_gain   = 0.005f;
+    lean_gain    = 0.008f;
+    max_body_angle = 0.25f;
+    ride_height  = 0.06f;
+    wheel_travel = 0.2f;
+    wheel_offset_fl = wheel_offset_fr = 0.0f;
+    wheel_offset_rl = wheel_offset_rr = 0.0f;
+    prev_speed   = 0.0f;
+    suspension_initialized = false;
 
     // Keys & Headlights
     keyW = false;
@@ -123,16 +148,122 @@ void Bus::OnKey(int key, int action){
     }
 }
 
-float Bus::GetTerrainHeightAtWheel(SceneObject wheel){
-    // Get global coord of wheel
-    auto wheel_center_local = (wheel.bbox_max + wheel.bbox_min) / 2.0f;
-    auto wheel_center_local_w = glm::vec4(wheel_center_local.x, wheel_center_local.y, wheel_center_local.z, 0.0f);
-    auto wheel_center_global = position + Matrix_Rotate_Y(yaw) * wheel_center_local_w;
+// Centro da roda e raio, em coordenadas locais do modelo
+static glm::vec3 WheelCenter(const SceneObject& w) { return (w.bbox_max + w.bbox_min) * 0.5f; }
+static float     WheelRadius(const SceneObject& w) { return (w.bbox_max.y - w.bbox_min.y) * 0.5f; }
 
-    // Get height at wheel
-    float wheel_height = GetTerrainHeight(wheel_center_global.x, wheel_center_global.z);
+// Mola amortecida de 2ª ordem (Euler semi-implícito):
+//   x'' = omega² (alvo - x) - 2 zeta omega x'
+static void SpringDamper(float& x, float& v, float target, float omega, float zeta, float dt)
+{
+    const float k = omega * omega;
+    const float c = 2.0f * zeta * omega;
+    v += (k * (target - x) - c * v) * dt;
+    x += v * dt;
+}
 
-    return wheel_height;
+float Bus::GetTerrainHeightAtWheel(const SceneObject& wheel){
+    // Projeção horizontal do centro da roda (só yaw + escala; pitch/roll pouco
+    // alteram o XZ e incluí-los criaria realimentação com a própria suspensão)
+    glm::vec3 c = WheelCenter(wheel);
+    glm::vec4 c_world = Matrix_Translate(position.x, 0.0f, position.z)
+                      * Matrix_Rotate_Y(yaw)
+                      * Matrix_Scale(scale.x, scale.y, scale.z)
+                      * glm::vec4(c.x, c.y, c.z, 1.0f);
+
+    return GetTerrainHeight(c_world.x, c_world.z);
+}
+
+void Bus::UpdateSuspension(double deltaT){
+    const float dt = (float)deltaT;
+    if (dt <= 0.0f) return;
+
+    const SceneObject& wheel_fl = g_VirtualScene["wheel_fl"];
+    const SceneObject& wheel_fr = g_VirtualScene["wheel_fr"];
+    const SceneObject& wheel_rl = g_VirtualScene["wheel_rl"];
+    const SceneObject& wheel_rr = g_VirtualScene["wheel_rr"];
+
+    // --- 1. Geometria do chassi (a partir das bounding boxes das rodas) ---
+    const glm::vec3 c_fl = WheelCenter(wheel_fl), c_fr = WheelCenter(wheel_fr);
+    const glm::vec3 c_rl = WheelCenter(wheel_rl), c_rr = WheelCenter(wheel_rr);
+    const float z_front = 0.5f * (c_fl.z + c_fr.z);
+    const float z_rear  = 0.5f * (c_rl.z + c_rr.z);
+    const float wheel_base  = std::abs(z_front - z_rear) * scale.z;
+    const float track_front = std::abs(c_fr.x - c_fl.x) * scale.x;
+    const float track_rear  = std::abs(c_rr.x - c_rl.x) * scale.x;
+    const float track_width = 0.5f * (track_front + track_rear);
+
+    // --- 2. Altura do terreno sob cada roda ---
+    const float h_fl = GetTerrainHeightAtWheel(wheel_fl);
+    const float h_fr = GetTerrainHeightAtWheel(wheel_fr);
+    const float h_rl = GetTerrainHeightAtWheel(wheel_rl);
+    const float h_rr = GetTerrainHeightAtWheel(wheel_rr);
+    const float h_front = 0.5f * (h_fl + h_fr);
+    const float h_rear  = 0.5f * (h_rl + h_rr);
+    const float h_left  = 0.5f * (h_fl + h_rl);
+    const float h_right = 0.5f * (h_fr + h_rr);
+
+    // --- 3. Alvos da carroceria: plano do terreno + efeitos inerciais ---
+    // Aceleração longitudinal: acelerar empina o nariz (pitch +), frear afunda (pitch -)
+    const float accel = (speed - prev_speed) / dt;
+    prev_speed = speed;
+    // Aceleração lateral (centrípeta): v * taxa de giro. Positiva ao virar à esquerda;
+    // a carroceria inclina para fora da curva (lado direito desce => roll -)
+    const float yaw_rate = speed * std::tan(steering_angle) / wheel_base;
+    const float lat_acc  = speed * yaw_rate;
+
+    pitch_target = std::atan2(h_front - h_rear, wheel_base) + squat_gain * accel;
+    roll_target  = std::atan2(h_right - h_left, track_width) - lean_gain * lat_acc;
+    pitch_target = glm::clamp(pitch_target, -max_body_angle, max_body_angle);
+    roll_target  = glm::clamp(roll_target,  -max_body_angle, max_body_angle);
+
+    // Pivô da carroceria (aprox. centro de massa) entre os eixos. Pitch e roll
+    // giram em torno dele, então sob aceleração a frente sobe e a traseira desce.
+    // A altura alvo é a do plano do terreno nesse ponto, mais a altura de rodagem.
+    body_pivot_z = (z_rear + (z_front - z_rear) * pivot_fraction) * scale.z;
+    heave_target = h_rear + (h_front - h_rear) * pivot_fraction + ride_height;
+
+    // No primeiro quadro, posiciona a carroceria direto no repouso (sem "queda")
+    if (!suspension_initialized)
+    {
+        heave = heave_target;
+        pitch = pitch_target;
+        roll  = roll_target;
+        heave_vel = pitch_vel = roll_vel = 0.0f;
+        suspension_initialized = true;
+    }
+
+    // --- 4. Integração das molas da carroceria, com sub-passos fixos de ~5 ms
+    //        para manter a estabilidade mesmo com FPS baixo ---
+    const int   steps = std::min(200, std::max(1, (int)std::ceil(dt / 0.005f)));
+    const float h     = dt / steps;
+    for (int i = 0; i < steps; ++i)
+    {
+        SpringDamper(heave, heave_vel, heave_target, heave_omega, heave_zeta, h);
+        SpringDamper(pitch, pitch_vel, pitch_target, body_omega,  body_zeta,  h);
+        SpringDamper(roll,  roll_vel,  roll_target,  body_omega,  body_zeta,  h);
+    }
+    position.y = heave;
+    position.w = 1.0f;
+
+    // --- 5. Rodas: com a pose final da carroceria, desloca cada roda no Y local
+    //        até tocar o chão, limitado pelo curso da suspensão ---
+    const glm::mat4 M = GetModelMatrix();
+    auto WheelOffset = [&](const SceneObject& w, float ground) {
+        const glm::vec3 c = WheelCenter(w);
+        const float     r = WheelRadius(w);
+        const glm::vec4 c_world = M * glm::vec4(c.x, c.y, c.z, 1.0f);
+        // Quanto o centro precisa subir (+) ou descer (-) para a roda tocar o chão.
+        // Divide pela escala para voltar a unidades locais (inclinação é pequena, cos ~ 1)
+        // Em repouso a roda fica estendida em -ride_height; o curso é centrado nesse ponto.
+        const float dy_world = (ground + r * scale.y) - c_world.y;
+        const float rest     = -ride_height / scale.y;
+        return glm::clamp(dy_world / scale.y, rest - wheel_travel, rest + wheel_travel);
+    };
+    wheel_offset_fl = WheelOffset(wheel_fl, h_fl);
+    wheel_offset_fr = WheelOffset(wheel_fr, h_fr);
+    wheel_offset_rl = WheelOffset(wheel_rl, h_rl);
+    wheel_offset_rr = WheelOffset(wheel_rr, h_rr);
 }
 
 void Bus::UpdatePos(double deltaT){
@@ -165,46 +296,11 @@ void Bus::UpdatePos(double deltaT){
     // Calculate turning rate/direction
     turn = keyA - keyD;
 
-    // Bus orientation
-    // Get wheel objects
-    auto wheel_fl = g_VirtualScene["wheel_fl"];
-    auto wheel_fr = g_VirtualScene["wheel_fr"];
-    auto wheel_rl = g_VirtualScene["wheel_rl"];
-    auto wheel_rr = g_VirtualScene["wheel_rr"];
-    // Get terrain height at each wheel
-    float height_fl = GetTerrainHeightAtWheel(wheel_fl);
-    float height_fr = GetTerrainHeightAtWheel(wheel_fr);
-    float height_rl = GetTerrainHeightAtWheel(wheel_rl);
-    float height_rr = GetTerrainHeightAtWheel(wheel_rr);
-    // Get average heights
-    float height_avg_front = (height_fl + height_fr) / 2.0f;
-    float height_avg_rear  = (height_rl + height_rr) / 2.0f;
-    float height_avg_left  = (height_rl + height_fl) / 2.0f;
-    float height_avg_right = (height_fr + height_rr) / 2.0f;
-
-    const float wheel_base  = 5.6f;   // TODO: magic number = wheel base (distance between rear and front axles)
-    const float track_width = 2.16f; // TODO: magic number = track width (distance between left and right wheels)
-
-    // Calculate pitch and roll targets
-    pitch_target = atan2(height_avg_front - height_avg_rear, wheel_base);
-    roll_target  = atan2(height_avg_right - height_avg_left, track_width);
-    // Calculate actual pitch and roll with damping
-    pitch += (pitch_target - pitch) * std::min(1.0, K_suspension * deltaT);
-    roll  += (roll_target  - roll)  * std::min(1.0, K_suspension * deltaT);
-
-    // Update wheel rotation
-    auto wheel_obj = g_VirtualScene["wheel_rr"];
-    const float wheel_radius = (wheel_obj.bbox_max.y - wheel_obj.bbox_min.y) / 2.0f;
-    wheel_angle += (speed * deltaT) / wheel_radius;
-
-    // Forward vector
-    glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
-
-    // Update position
-    position += forward * speed * (float)deltaT;
-    // Código novo para manter o ônibus tocando o relevo do terreno
-    position.y = height_avg_rear;
-    position.w = 1.0f;
+    // Wheel base (distance between rear and front axles), from the wheel bboxes
+    const SceneObject& wheel_fl = g_VirtualScene["wheel_fl"];
+    const SceneObject& wheel_rl = g_VirtualScene["wheel_rl"];
+    const SceneObject& wheel_rr = g_VirtualScene["wheel_rr"];
+    const float wheel_base = std::abs(WheelCenter(wheel_fl).z - WheelCenter(wheel_rl).z) * scale.z;
 
     // Update steering angle
     steering_target = glm::clamp(turn * 3.0f / (std::abs(speed) + 1.0f), -0.6f, 0.6f);
@@ -213,14 +309,29 @@ void Bus::UpdatePos(double deltaT){
 
     // Update angle (only while moving, invert if reversing)
     yaw += speed * std::tan(steering_angle) / wheel_base * deltaT;
+
+    // Update horizontal position (height is handled by the suspension)
+    glm::vec4 forward = Matrix_Rotate_Y(yaw) * forward_local;
+    position += forward * speed * (float)deltaT;
+    position.w = 1.0f;
+
+    // Update wheel rotation
+    wheel_angle += (speed * deltaT) / (WheelRadius(wheel_rr) * scale.y);
+
+    // Body height, pitch, roll and wheel contact
+    UpdateSuspension(deltaT);
 }
 
 glm::mat4 Bus::GetModelMatrix() const
 {
+    // position.xz = eixo traseiro; position.y = altura do pivô (heave).
+    // Pitch/roll são aplicados em torno do pivô (0, 0, body_pivot_z) no referencial do ônibus.
     return Matrix_Translate(position.x, position.y, position.z)
          * Matrix_Rotate_Y(yaw)
+         * Matrix_Translate(0.0f, 0.0f, body_pivot_z)
          * Matrix_Rotate_X(pitch)
          * Matrix_Rotate_Z(roll)
+         * Matrix_Translate(0.0f, 0.0f, -body_pivot_z)
          * Matrix_Scale(scale.x, scale.y, scale.z);
 }
 
@@ -234,29 +345,22 @@ void Bus::Draw(ObjModel& model)
         const std::string& shape_name = model.shapes[s].name;
         glm::mat4 new_model_mat;
 
-        // Rodas traseiras
-        if (shape_name == "wheel_rr" || shape_name == "wheel_rl"){
-            // Encontra centro das rodas
-            auto wheel_obj = g_VirtualScene[shape_name];
-            auto wheel_c = (wheel_obj.bbox_max + wheel_obj.bbox_min) / 2.0f;
+        // Rodas: sobe/desce pela suspensão, esterça (dianteiras) e gira, em torno do seu centro
+        const bool is_front = (shape_name == "wheel_fr" || shape_name == "wheel_fl");
+        const bool is_rear  = (shape_name == "wheel_rr" || shape_name == "wheel_rl");
+        if (is_front || is_rear){
+            float susp_offset = 0.0f;
+            if      (shape_name == "wheel_fl") susp_offset = wheel_offset_fl;
+            else if (shape_name == "wheel_fr") susp_offset = wheel_offset_fr;
+            else if (shape_name == "wheel_rl") susp_offset = wheel_offset_rl;
+            else                               susp_offset = wheel_offset_rr;
 
-            // Aplica rotação
-            new_model_mat = model_mat 
-                          * Matrix_Translate(wheel_c.x, wheel_c.y, wheel_c.z)
-                          * Matrix_Rotate_X(-wheel_angle)
-                          * Matrix_Translate(-wheel_c.x, -wheel_c.y, -wheel_c.z);
-        }
-        
-        // Rodas dianteiras
-        else if (shape_name == "wheel_fr" || shape_name == "wheel_fl"){
-            // Encontra centro das rodas
-            auto wheel_obj = g_VirtualScene[shape_name];
-            auto wheel_c = (wheel_obj.bbox_max + wheel_obj.bbox_min) / 2.0f;
-            
-            // Aplica rotação
-            new_model_mat = model_mat 
-                          * Matrix_Translate(wheel_c.x, wheel_c.y, wheel_c.z)
-                          * Matrix_Rotate_Y(steering_angle)
+            const glm::vec3 wheel_c = WheelCenter(g_VirtualScene[shape_name]);
+            const float steer = is_front ? steering_angle : 0.0f;
+
+            new_model_mat = model_mat
+                          * Matrix_Translate(wheel_c.x, wheel_c.y + susp_offset, wheel_c.z)
+                          * Matrix_Rotate_Y(steer)
                           * Matrix_Rotate_X(-wheel_angle)
                           * Matrix_Translate(-wheel_c.x, -wheel_c.y, -wheel_c.z);
         }

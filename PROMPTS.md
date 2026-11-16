@@ -61,3 +61,9 @@ PROMPT: Configure o ciclo da tecla L para ligar na primeira vez a luz menor do m
 # Geração de terreno a partir de mapa topográfico PNG 16 bits (vale.png)
 
 PROMPT: Implemente o carregamento direto do mapa topográfico data/vale.png em PNG de 16 bits via stbi_load_16 para gerar a malha do terreno com normais analíticas suaves e consulta de altura bilinear GetTerrainHeight(x, z) para posicionar o ônibus e os postes sobre o relevo.
+
+---
+
+# Implementação de suspensão no ônibus
+
+PROMPT: Temos uma implementação primitiva de uma suspensão no ônibus, mas as rodas não acompanham o terreno. Implemente um modelo de suspensão com parâmetros ajustáveis.

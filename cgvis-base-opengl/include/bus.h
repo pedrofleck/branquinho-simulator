@@ -21,7 +21,6 @@ public:
     float direction;
     float wheel_angle;
     int turn;
-    float K_suspension;
     float air_resistance;
     float rolling_resistance;
     float engine_power;
@@ -33,6 +32,28 @@ public:
     float steering_rate;
     float pitch, yaw, roll;
     float pitch_target, yaw_target, roll_target;
+
+    // Suspensão
+    //   A carroceria é um sistema massa-mola-amortecedor em 3 graus de liberdade
+    //   (altura "heave", pitch e roll), puxado em direção a alvos calculados a
+    //   partir do terreno sob as rodas + efeitos inerciais (aceleração/curva).
+    //   As rodas seguem o chão independentemente, deslocando-se no eixo Y local
+    //   da carroceria (limitado pelo curso da suspensão).
+    float heave, heave_target;               // altura do pivô da carroceria (nível do chão)
+    float pivot_fraction;                    // posição do pivô (centro de massa) entre eixos: 0 = traseiro, 1 = dianteiro
+    float body_pivot_z;                      // z local do pivô em unidades de mundo (calculado em UpdateSuspension)
+    float heave_vel, pitch_vel, roll_vel;    // velocidades dos graus de liberdade da carroceria
+    float heave_omega, heave_zeta;           // frequência natural (rad/s) e razão de amortecimento da altura
+    float body_omega,  body_zeta;            // idem, para pitch e roll
+    float squat_gain;                        // rad por m/s² de aceleração longitudinal (empina/afunda)
+    float lean_gain;                         // rad por m/s² de aceleração lateral (inclina na curva)
+    float max_body_angle;                    // limite dos alvos de pitch/roll (rad)
+    float ride_height;                       // elevação da carroceria em repouso (mundo); rodas estendem para baixo
+    float wheel_travel;                      // curso máximo da roda em torno do repouso (unid. locais)
+    float wheel_offset_fl, wheel_offset_fr;  // deslocamento Y local de cada roda (aplicado em Draw)
+    float wheel_offset_rl, wheel_offset_rr;
+    float prev_speed;
+    bool  suspension_initialized;
 
     // Keys
     bool keyW;
@@ -57,10 +78,13 @@ public:
     bool IsHighBeamActive() const { return high_beam_held || high_beam_latched; }
 
     // Retorna altura do terreno na roda
-    float GetTerrainHeightAtWheel(SceneObject wheel);
+    float GetTerrainHeightAtWheel(const SceneObject& wheel);
 
     // Atualiza a posição do ônibus
     void UpdatePos(const double deltaT);
+
+    // Atualiza carroceria (molas) e rodas (contato com o chão)
+    void UpdateSuspension(const double deltaT);
 
     // Atualiza teclas
     void OnKey(int key, int action);
