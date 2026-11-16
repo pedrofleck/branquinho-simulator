@@ -167,9 +167,9 @@ glm::mat4 Camera::ComputeViewMatrix(const Bus& bus) const
         x = r * std::cos(phi) * std::sin(theta);
     
         camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-        camera_position_c  = bus.position + glm::vec4(x, y, z, 0.0f);
+        glm::vec4 camera_lookat_l = bus.GetCenterGlobal();
+        camera_position_c  = camera_lookat_l + glm::vec4(x, y, z, 0.0f);
         camera_position_c.w = 1.0f;
-        glm::vec4 camera_lookat_l = bus.position;
         camera_view_vector = camera_lookat_l - camera_position_c;
     // Câmera bumper
     } else if (mode == Bumper){
