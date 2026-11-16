@@ -73,3 +73,10 @@ PROMPT: Temos uma implementação primitiva de uma suspensão no ônibus, mas as
 # Modificar centro da câmera look-at
 
 PROMPT: Atualmente a câmera orbita o eixo traseiro do ônibus, que é a sua origem. Mova o centro da câmera Orbit para o meio do ônibus.
+
+---
+
+# Comportamento da suspensão em subida ou descida
+
+PROMPT: A suspensão está apresentando um comportamento meio estranho quando o ônibus está subindo ou descendo um terreno inclinado.
+Quando está subindo, as molas são comprimidas e o ônibus fica mais baixo que o normal. Já quando está descendo, o ônibus fica bem alto, com a suspensão esticada. Investigue e conserte este bug

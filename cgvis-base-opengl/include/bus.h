@@ -54,6 +54,8 @@ public:
     float wheel_offset_fl, wheel_offset_fr;  // deslocamento Y local de cada roda (aplicado em Draw)
     float wheel_offset_rl, wheel_offset_rr;
     float prev_speed;
+    // Alvos do terreno no quadro anterior (para a velocidade do terreno, usada no amortecedor)
+    float heave_terrain_prev, pitch_terrain_prev, roll_terrain_prev;
     bool  suspension_initialized;
 
     // Keys

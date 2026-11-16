@@ -72,6 +72,7 @@ Bus::Bus(){
     wheel_offset_fl = wheel_offset_fr = 0.0f;
     wheel_offset_rl = wheel_offset_rr = 0.0f;
     prev_speed   = 0.0f;
+    heave_terrain_prev = pitch_terrain_prev = roll_terrain_prev = 0.0f;
     suspension_initialized = false;
 
     // Keys & Headlights
@@ -154,12 +155,17 @@ static glm::vec3 WheelCenter(const SceneObject& w) { return (w.bbox_max + w.bbox
 static float     WheelRadius(const SceneObject& w) { return (w.bbox_max.y - w.bbox_min.y) * 0.5f; }
 
 // Mola amortecida de 2ª ordem (Euler semi-implícito):
-//   x'' = omega² (alvo - x) - 2 zeta omega x'
-static void SpringDamper(float& x, float& v, float target, float omega, float zeta, float dt)
+//   x'' = omega² (alvo - x) - 2 zeta omega (x' - alvo')
+// O amortecedor age sobre a velocidade RELATIVA ao alvo (como um amortecedor real,
+// que fica entre carroceria e roda). Assim, quando o alvo se move a taxa constante
+// (subida/descida), não sobra erro em regime: a carroceria acompanha sem comprimir
+// nem esticar a suspensão.
+static void SpringDamper(float& x, float& v, float target, float target_vel,
+                         float omega, float zeta, float dt)
 {
     const float k = omega * omega;
     const float c = 2.0f * zeta * omega;
-    v += (k * (target - x) - c * v) * dt;
+    v += (k * (target - x) - c * (v - target_vel)) * dt;
     x += v * dt;
 }
 
@@ -213,16 +219,22 @@ void Bus::UpdateSuspension(double deltaT){
     const float yaw_rate = speed * std::tan(steering_angle) / wheel_base;
     const float lat_acc  = speed * yaw_rate;
 
-    pitch_target = std::atan2(h_front - h_rear, wheel_base) + squat_gain * accel;
-    roll_target  = std::atan2(h_right - h_left, track_width) - lean_gain * lat_acc;
-    pitch_target = glm::clamp(pitch_target, -max_body_angle, max_body_angle);
-    roll_target  = glm::clamp(roll_target,  -max_body_angle, max_body_angle);
+    // Parte que vem do terreno (o que as rodas "carregam") ...
+    const float pitch_terrain = std::atan2(h_front - h_rear, wheel_base);
+    const float roll_terrain  = std::atan2(h_right - h_left, track_width);
+    // ... e parte inercial (forças sobre a carroceria, não movem o "chão" do amortecedor)
+    const float pitch_inertial = squat_gain * accel;
+    const float roll_inertial  = -lean_gain * lat_acc;
 
     // Pivô da carroceria (aprox. centro de massa) entre os eixos. Pitch e roll
     // giram em torno dele, então sob aceleração a frente sobe e a traseira desce.
     // A altura alvo é a do plano do terreno nesse ponto, mais a altura de rodagem.
     body_pivot_z = (z_rear + (z_front - z_rear) * pivot_fraction) * scale.z;
-    heave_target = h_rear + (h_front - h_rear) * pivot_fraction + ride_height;
+    const float heave_terrain = h_rear + (h_front - h_rear) * pivot_fraction + ride_height;
+
+    pitch_target = glm::clamp(pitch_terrain + pitch_inertial, -max_body_angle, max_body_angle);
+    roll_target  = glm::clamp(roll_terrain  + roll_inertial,  -max_body_angle, max_body_angle);
+    heave_target = heave_terrain;
 
     // No primeiro quadro, posiciona a carroceria direto no repouso (sem "queda")
     if (!suspension_initialized)
@@ -231,19 +243,39 @@ void Bus::UpdateSuspension(double deltaT){
         pitch = pitch_target;
         roll  = roll_target;
         heave_vel = pitch_vel = roll_vel = 0.0f;
+        heave_terrain_prev = heave_terrain;
+        pitch_terrain_prev = pitch_terrain;
+        roll_terrain_prev  = roll_terrain;
         suspension_initialized = true;
     }
 
+    // Velocidade com que o terreno se move sob o ônibus neste quadro
+    // (ex.: subindo uma rampa, heave_terrain_vel = speed * inclinação)
+    const float heave_terrain_vel = (heave_terrain - heave_terrain_prev) / dt;
+    const float pitch_terrain_vel = (pitch_terrain - pitch_terrain_prev) / dt;
+    const float roll_terrain_vel  = (roll_terrain  - roll_terrain_prev)  / dt;
+
     // --- 4. Integração das molas da carroceria, com sub-passos fixos de ~5 ms
-    //        para manter a estabilidade mesmo com FPS baixo ---
+    //        para manter a estabilidade mesmo com FPS baixo. O alvo do terreno é
+    //        interpolado entre o quadro anterior e o atual dentro dos sub-passos ---
     const int   steps = std::min(200, std::max(1, (int)std::ceil(dt / 0.005f)));
     const float h     = dt / steps;
     for (int i = 0; i < steps; ++i)
     {
-        SpringDamper(heave, heave_vel, heave_target, heave_omega, heave_zeta, h);
-        SpringDamper(pitch, pitch_vel, pitch_target, body_omega,  body_zeta,  h);
-        SpringDamper(roll,  roll_vel,  roll_target,  body_omega,  body_zeta,  h);
+        const float s = (float)(i + 1) / steps;
+        const float heave_t = heave_terrain_prev + (heave_terrain - heave_terrain_prev) * s;
+        const float pitch_t = glm::clamp(pitch_terrain_prev + (pitch_terrain - pitch_terrain_prev) * s
+                                         + pitch_inertial, -max_body_angle, max_body_angle);
+        const float roll_t  = glm::clamp(roll_terrain_prev  + (roll_terrain  - roll_terrain_prev)  * s
+                                         + roll_inertial,  -max_body_angle, max_body_angle);
+
+        SpringDamper(heave, heave_vel, heave_t, heave_terrain_vel, heave_omega, heave_zeta, h);
+        SpringDamper(pitch, pitch_vel, pitch_t, pitch_terrain_vel, body_omega,  body_zeta,  h);
+        SpringDamper(roll,  roll_vel,  roll_t,  roll_terrain_vel,  body_omega,  body_zeta,  h);
     }
+    heave_terrain_prev = heave_terrain;
+    pitch_terrain_prev = pitch_terrain;
+    roll_terrain_prev  = roll_terrain;
     position.y = heave;
     position.w = 1.0f;
 
