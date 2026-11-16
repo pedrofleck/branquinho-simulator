@@ -65,7 +65,7 @@ Bus::Bus(){
     body_zeta    = 0.6f;
     squat_gain   = 0.005f;
     lean_gain    = 0.008f;
-    max_body_angle = 0.25f;
+    max_body_angle = 0.5f;
     ride_height  = 0.06f;
     wheel_travel = 0.2f;
     wheel_offset_fl = wheel_offset_fr = 0.0f;
