@@ -42,7 +42,7 @@ Lighting::Lighting()
     : bus_headlights_active(false)
     , bus_high_beams_active(false)
     , sun_angle(1.0f)      // Posição inicial: Sol elevado a ~57 graus do horizonte
-    , fog_density(0.025f)  // Densidade moderada de névoa atmosférica
+    , fog_density(0.005f)  // Densidade moderada de névoa atmosférica
 {
 }
 
