@@ -21,6 +21,7 @@
 #define HEADLIGHT_LENS 6
 #define TREE_TRUNK     7
 #define TREE_CANOPY    8
+#define CURB           9
 
 // Estrutura que representa um modelo geométrico carregado a partir de um arquivo .obj
 struct ObjModel
@@ -75,6 +76,7 @@ void BuildTreeForestAndAddToVirtualScene(
     const char* instances_filename = "../../../data/terrain/trees.txt"
 );
 void DrawTreeForest();
+void DrawRoadCurbs();
 
 // Funções de shaders e GPU
 void LoadShadersFromFiles();

@@ -75,6 +75,7 @@ uniform mat4 projection;  // Matriz Projection: coordenadas da câmera -> NDC
 #define HEADLIGHT_LENS 6
 #define TREE_TRUNK     7
 #define TREE_CANOPY    8
+#define CURB           9
 uniform int object_id;
 
 uniform vec4 bbox_min;  // Menor coordenada XYZ da caixa delimitadora do objeto
@@ -364,6 +365,31 @@ void main()
         Kd0 = mix(fol_tex, local_sat * 1.15, 0.32) * shade_grad;
         Ks  = vec3(0.04, 0.05, 0.03);
         q   = 10.0;
+    }
+    else if ( object_id == CURB )
+    {
+        // Meio-fio 3D pré-moldado pintado de branco (geométrico, zero vazamento para o terreno)
+        // texcoords.x = distância em metros ao longo da guia; texcoords.y: [0..0.45] topo, [0.50..1.0] parede vertical
+        vec2 grain_uv   = fract(vec2(texcoords.x * 1.35, texcoords.y * 2.10)) * 0.14 + vec2(0.08);
+        vec3 conc_tex   = texture(TerrainMaterials, vec3(grain_uv, 2.0)).rgb;
+        float conc_lum  = dot(conc_tex, vec3(0.333));
+
+        // Junta de dilatação sutil entre peças pré-moldadas de 1.0m ao longo da via
+        float frac_m    = fract(texcoords.x);
+        float seam_dist = min(frac_m, 1.0 - frac_m);
+        float joint     = 1.0 - smoothstep(0.008, 0.024, seam_dist);
+
+        // Leve escurecimento apenas no contato inferior com a sarjeta/asfalto (parede vertical texcoords.y >= 0.5)
+        float is_side      = step(0.48, texcoords.y);
+        float bottom_grime = smoothstep(0.80, 0.99, texcoords.y) * is_side;
+
+        vec3 curb_paint = vec3(0.84, 0.85, 0.83) * (0.90 + 0.18 * conc_lum);
+        curb_paint *= (1.0 - 0.32 * joint);
+        curb_paint *= (1.0 - 0.24 * bottom_grime);
+
+        Kd0 = curb_paint;
+        Ks  = vec3(0.22, 0.22, 0.23); // Reflete nitidamente faróis do ônibus, postes e Sol
+        q   = 36.0;
     }
     else if ( object_id == LIGHTPOLE )
     {

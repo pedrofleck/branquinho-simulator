@@ -217,6 +217,10 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, PLANE);
         DrawVirtualObject("terrain");
 
+        // Renderiza o meio-fio 3D geométrico apenas no modo jogável (não sobre a foto satélite F10)
+        if (!g_SatelliteTerrainMode)
+            DrawRoadCurbs();
+
         // Renderiza as árvores 3D instanciadas no terreno
         DrawTreeForest();
 

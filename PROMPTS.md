@@ -80,3 +80,28 @@ PROMPT: Atualmente a câmera orbita o eixo traseiro do ônibus, que é a sua ori
 
 PROMPT: A suspensão está apresentando um comportamento meio estranho quando o ônibus está subindo ou descendo um terreno inclinado.
 Quando está subindo, as molas são comprimidas e o ônibus fica mais baixo que o normal. Já quando está descendo, o ônibus fica bem alto, com a suspensão esticada. Investigue e conserte este bug
+
+---
+
+# Geração de terreno multi-material por satélite, recorte de área útil, floresta 3D e edição via PSD
+
+PROMPT: Implemente um pipeline de geração de terreno usando exclusivamente a ortofoto mascarada (`tools/bruto_2012_mascara.tiff`) reprojetada sobre o heightmap 16-bit (`data/vale.png`), descartando regiões pretas externas via `valid_mask.png`, classificando 8 materiais em dois splatmaps (`splatmap_0.png` e `splatmap_1.png`) com modulador cromático regional (`macro_albedo.png`), posicionando árvores 3D instanciadas (`data/tree.obj` + `trees.txt`), separando a visualização de satélite (`F10`) da câmera livre (`F11`) e disponibilizando a ferramenta C++ `tools/terrain_psd_tool` (`--init` / `--apply`) para edição manual em camadas PSD.
+
+---
+
+# Extração viária pura por visão computacional sobre o satélite, ajuste de árvore e execução manual do PSD
+
+PROMPT: Refaça a segmentação do asfalto em `tools/generate_terrain_assets.py` utilizando exclusivamente a imagem de satélite `tools/bruto_2012_mascara.tiff` (removendo qualquer dependência do OpenStreetMap), com desobstrução direcional sob copas de árvores e inclusão da estrada florestal sudeste. Remova a execução automática do `terrain_psd_tool.exe` ao iniciar o simulador (documentando a execução manual com `--apply` no `README.md`), elimine a exclusão automática de árvores em raio de 4m do asfalto e aumente a densidade da vegetação gerada.
+
+---
+
+# Suavização geodésica estrita no leito viário preservando pistas paralelas e encostas
+
+PROMPT: Desfaça a suavização de terreno com halo externo sobre as bordas e salve backups do heightmap original (`vale_backup.png` e `vale_processed_backup.png`). Implemente uma difusão geodésica 3x3 restrita exclusivamente aos pixels internos do asfalto (com barreira em bordas e degraus verticais) para eliminar ondulações sem alterar taludes adjacentes nem nivelar pistas paralelas em cotas diferentes.
+
+---
+
+# Meio-fio 3D geométrico com quinas de 90°, rebaixamento do asfalto em 10 cm e iluminação dedicada
+
+PROMPT: Implemente a geração procedural de geometria 3D para o meio-fio ao longo da borda da camada de asfalto principal (`splatmap_0.r`), recortando automaticamente as interseções com o asfalto secundário (`splatmap_0.g`). Extraia o contorno via Marching Squares com suavização de Taubin e simplificação Ramer-Douglas-Peucker para produzir segmentos retilíneos contínuos, com faces separadas formando ângulos retos de 90 graus entre o topo, a parede vertical e o asfalto. Mantenha o topo do meio-fio nivelado à cota natural do terreno adjacente, aplicando rebaixamento físico de -10 cm exclusivamente no interior do asfalto, e adicione um material dedicado no fragment shader (`object_id == CURB`) com pintura branca pré-moldada isolada do entorno e reflexão especular/difusa para Sol, postes e faróis do ônibus.
+

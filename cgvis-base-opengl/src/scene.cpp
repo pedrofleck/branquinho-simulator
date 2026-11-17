@@ -29,6 +29,8 @@
 #include <set>
 #include <limits>
 #include <algorithm>
+#include <unordered_map>
+#include <cstdint>
 
 #include <stb_image.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -435,19 +437,25 @@ struct TerrainVertex
 };
 
 // Suaviza o terreno em float32 estritamente DENTRO do asfalto (`splatmap_0.r + splatmap_0.g`)
-// por difusão geodésica 3x3: não altera encostas vizinhas e não mistura pistas paralelas em alturas distintas.
+// por difusão geodésica 3x3 e aplica o rebaixamento físico de -10 cm somente no asfalto.
 static void SmoothTerrainAlongRoads(
     std::vector<float>& heights,
     int                 W,
     int                 H,
-    const char*         splat0_filename
+    const char*         splat0_filename,
+    bool                unapply_recess_first,
+    std::vector<float>* out_unrecessed_heights
 )
 {
     int sw = 0, sh = 0, sc = 0;
     stbi_set_flip_vertically_on_load(false);
     unsigned char* splat0 = stbi_load(splat0_filename, &sw, &sh, &sc, 4);
     if (splat0 == NULL)
+    {
+        if (out_unrecessed_heights)
+            *out_unrecessed_heights = heights;
         return;
+    }
 
     const size_t N = static_cast<size_t>(W) * static_cast<size_t>(H);
     std::vector<unsigned char> in_asph(N, 0);
@@ -488,6 +496,17 @@ static void SmoothTerrainAlongRoads(
     }
     stbi_image_free(splat0);
 
+    // Desfaz temporariamente -10 cm se vale_processed.png já veio rebaixado
+    std::vector<float> h_unrec(heights);
+    if (unapply_recess_first)
+    {
+        for (size_t i = 0; i < N; ++i)
+        {
+            if (w_asph[i] > 0.45f && heights[i] > 33.02f)
+                h_unrec[i] += 0.10f;
+        }
+    }
+
     std::vector<size_t> active_indices;
     active_indices.reserve(N / 8);
 
@@ -498,13 +517,13 @@ static void SmoothTerrainAlongRoads(
         for (int x = 0; x < W; ++x)
         {
             size_t idx = static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x);
-            if (w_asph[idx] <= 0.45f || heights[idx] <= 33.02f)
+            if (w_asph[idx] <= 0.45f || h_unrec[idx] <= 33.02f)
                 continue;
 
             int xL = std::max(0, x - 1);
             int xR = std::min(W - 1, x + 1);
-            float dx = (xR > xL) ? (heights[static_cast<size_t>(y) * W + xR] - heights[static_cast<size_t>(y) * W + xL]) / static_cast<float>(xR - xL) : 0.0f;
-            float dy = (yD > yU) ? (heights[static_cast<size_t>(yD) * W + x] - heights[static_cast<size_t>(yU) * W + x]) / static_cast<float>(yD - yU) : 0.0f;
+            float dx = (xR > xL) ? (h_unrec[static_cast<size_t>(y) * W + xR] - h_unrec[static_cast<size_t>(y) * W + xL]) / static_cast<float>(xR - xL) : 0.0f;
+            float dy = (yD > yU) ? (h_unrec[static_cast<size_t>(yD) * W + x] - h_unrec[static_cast<size_t>(yU) * W + x]) / static_cast<float>(yD - yU) : 0.0f;
             float grad = std::hypot(dx, dy);
             if (grad <= 0.85f)
             {
@@ -536,8 +555,8 @@ static void SmoothTerrainAlongRoads(
         w_node[idx] = all_inner ? 1.0f : 0.15f;
     }
 
-    std::vector<float> h_cur(heights);
-    std::vector<float> h_next(heights);
+    std::vector<float> h_cur(h_unrec);
+    std::vector<float> h_next(h_unrec);
     static const float kKernel[3][3] = {
         { 0.7f, 1.0f, 0.7f },
         { 1.0f, 1.2f, 1.0f },
@@ -570,10 +589,623 @@ static void SmoothTerrainAlongRoads(
         h_cur.swap(h_next);
     }
 
-    for (size_t idx : active_indices)
-        heights[idx] = h_cur[idx];
+    if (out_unrecessed_heights)
+        *out_unrecessed_heights = h_cur;
 
-    printf("Suavizacao geodesica estrita no asfalto aplicada (%zu vertices, zero bordas/encostas alteradas).\n", active_indices.size());
+    for (size_t idx : active_indices)
+        heights[idx] = h_cur[idx] - 0.10f;
+
+    printf("Suavizacao geodesica estrita e rebaixamento (-10 cm) no asfalto aplicados (%zu vertices).\n", active_indices.size());
+}
+
+// ============================================================================
+// Meio-Fio 3D Geométrico (Marching Squares + Taubin + Ramer-Douglas-Peucker)
+// Extrai bordas retas e suaves da camada vermelha (`s0.r`), recorta encontros
+// com o asfalto secundário (`s0.g`) e gera blocos prismáticos com quinas de 90°.
+// ============================================================================
+static float SampleHeightGridBilinear(
+    const std::vector<float>& grid,
+    int                       W,
+    int                       H,
+    float                     world_x,
+    float                     world_z
+)
+{
+    float gx = (world_x + 0.5f * g_TerrainWorldWidth) / g_TerrainWorldWidth * static_cast<float>(W - 1);
+    float gz = (world_z + 0.5f * g_TerrainWorldDepth) / g_TerrainWorldDepth * static_cast<float>(H - 1);
+    gx = std::max(0.0f, std::min(static_cast<float>(W - 1), gx));
+    gz = std::max(0.0f, std::min(static_cast<float>(H - 1), gz));
+    int x0 = static_cast<int>(gx), y0 = static_cast<int>(gz);
+    int x1 = std::min(W - 1, x0 + 1), y1 = std::min(H - 1, y0 + 1);
+    float tx = gx - static_cast<float>(x0);
+    float ty = gz - static_cast<float>(y0);
+    float h00 = grid[static_cast<size_t>(y0) * static_cast<size_t>(W) + x0];
+    float h10 = grid[static_cast<size_t>(y0) * static_cast<size_t>(W) + x1];
+    float h01 = grid[static_cast<size_t>(y1) * static_cast<size_t>(W) + x0];
+    float h11 = grid[static_cast<size_t>(y1) * static_cast<size_t>(W) + x1];
+    float a = h00 * (1.0f - tx) + h10 * tx;
+    float b = h01 * (1.0f - tx) + h11 * tx;
+    return a * (1.0f - ty) + b * ty;
+}
+
+static void RDPSimplifyRange(
+    const std::vector<glm::vec2>& pts,
+    size_t                        start_idx,
+    size_t                        end_idx,
+    float                         eps,
+    std::vector<glm::vec2>&       out
+)
+{
+    if (end_idx <= start_idx + 1)
+    {
+        out.push_back(pts[start_idx]);
+        return;
+    }
+
+    const glm::vec2& A = pts[start_idx];
+    const glm::vec2& B = pts[end_idx];
+    float abx = B.x - A.x;
+    float abz = B.y - A.y;
+    float len = std::hypot(abx, abz);
+
+    float max_d = -1.0f;
+    size_t best_i = start_idx;
+    for (size_t i = start_idx + 1; i < end_idx; ++i)
+    {
+        float d = (len < 1e-6f)
+                ? std::hypot(pts[i].x - A.x, pts[i].y - A.y)
+                : std::fabs(abx * (pts[i].y - A.y) - abz * (pts[i].x - A.x)) / len;
+        if (d > max_d)
+        {
+            max_d = d;
+            best_i = i;
+        }
+    }
+
+    if (max_d > eps)
+    {
+        RDPSimplifyRange(pts, start_idx, best_i, eps, out);
+        RDPSimplifyRange(pts, best_i, end_idx, eps, out);
+    }
+    else
+    {
+        out.push_back(pts[start_idx]);
+    }
+}
+
+static void AddCurbQuad(
+    std::vector<TerrainVertex>& verts,
+    std::vector<GLuint>&        indices,
+    glm::vec3&                  bbox_min,
+    glm::vec3&                  bbox_max,
+    const glm::vec3&            p0, const glm::vec2& uv0,
+    const glm::vec3&            p1, const glm::vec2& uv1,
+    const glm::vec3&            p2, const glm::vec2& uv2,
+    const glm::vec3&            p3, const glm::vec2& uv3,
+    const glm::vec3&            face_normal
+)
+{
+    auto expand_bb = [&](const glm::vec3& p) {
+        bbox_min.x = std::min(bbox_min.x, p.x); bbox_min.y = std::min(bbox_min.y, p.y); bbox_min.z = std::min(bbox_min.z, p.z);
+        bbox_max.x = std::max(bbox_max.x, p.x); bbox_max.y = std::max(bbox_max.y, p.y); bbox_max.z = std::max(bbox_max.z, p.z);
+    };
+    GLuint base = static_cast<GLuint>(verts.size());
+    verts.push_back({ p0, face_normal, uv0 });
+    verts.push_back({ p1, face_normal, uv1 });
+    verts.push_back({ p2, face_normal, uv2 });
+    verts.push_back({ p3, face_normal, uv3 });
+    expand_bb(p0); expand_bb(p1); expand_bb(p2); expand_bb(p3);
+
+    glm::vec3 e1 = p1 - p0;
+    glm::vec3 e2 = p2 - p0;
+    glm::vec3 cross_n = glm::vec3(
+        e1.y * e2.z - e1.z * e2.y,
+        e1.z * e2.x - e1.x * e2.z,
+        e1.x * e2.y - e1.y * e2.x
+    );
+    float d = cross_n.x * face_normal.x + cross_n.y * face_normal.y + cross_n.z * face_normal.z;
+    if (d >= 0.0f)
+    {
+        indices.push_back(base + 0); indices.push_back(base + 1); indices.push_back(base + 2);
+        indices.push_back(base + 0); indices.push_back(base + 2); indices.push_back(base + 3);
+    }
+    else
+    {
+        indices.push_back(base + 0); indices.push_back(base + 3); indices.push_back(base + 2);
+        indices.push_back(base + 0); indices.push_back(base + 2); indices.push_back(base + 1);
+    }
+}
+
+static void BuildRoadCurbsAndAddToVirtualScene(
+    const char*                       splat0_filename,
+    const std::vector<unsigned char>& valid_mask,
+    int                               hmW,
+    int                               hmH,
+    const std::vector<float>&         unrecessed_heights,
+    const std::vector<float>&         recessed_heights
+)
+{
+    int sw = 0, sh = 0, sc = 0;
+    stbi_set_flip_vertically_on_load(false);
+    unsigned char* splat0 = stbi_load(splat0_filename, &sw, &sh, &sc, 4);
+    if (splat0 == NULL || sw < 4 || sh < 4)
+        return;
+
+    const size_t SN = static_cast<size_t>(sw) * static_cast<size_t>(sh);
+    std::vector<float> r_f(SN, 0.0f), r_tmp(SN, 0.0f);
+    std::vector<unsigned char> g_dil(SN, 0), g_tmp(SN, 0);
+    std::vector<unsigned char> valid_s(SN, 255), valid_tmp(SN, 255);
+
+    for (int y = 0; y < sh; ++y)
+    {
+        int my = std::min(hmH - 1, static_cast<int>((static_cast<size_t>(y) * hmH) / sh));
+        for (int x = 0; x < sw; ++x)
+        {
+            int mx = std::min(hmW - 1, static_cast<int>((static_cast<size_t>(x) * hmW) / sw));
+            size_t idx = static_cast<size_t>(y) * sw + x;
+            r_f[idx]     = static_cast<float>(splat0[idx * 4 + 0]) / 255.0f;
+            g_dil[idx]   = splat0[idx * 4 + 1];
+            valid_s[idx] = valid_mask[static_cast<size_t>(my) * hmW + mx];
+        }
+    }
+    stbi_image_free(splat0);
+
+    // 2 passagens 3x3 Gaussiana leve sobre r_f para eliminar serrilhado de pixel antes do Marching Squares
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int y = 0; y < sh; ++y)
+        {
+            int y0 = std::max(0, y - 1), y2 = std::min(sh - 1, y + 1);
+            for (int x = 0; x < sw; ++x)
+            {
+                int x0 = std::max(0, x - 1), x2 = std::min(sw - 1, x + 1);
+                float sum =
+                    1.0f * r_f[static_cast<size_t>(y0) * sw + x0] + 2.0f * r_f[static_cast<size_t>(y0) * sw + x] + 1.0f * r_f[static_cast<size_t>(y0) * sw + x2] +
+                    2.0f * r_f[static_cast<size_t>(y)  * sw + x0] + 4.0f * r_f[static_cast<size_t>(y)  * sw + x] + 2.0f * r_f[static_cast<size_t>(y)  * sw + x2] +
+                    1.0f * r_f[static_cast<size_t>(y2) * sw + x0] + 2.0f * r_f[static_cast<size_t>(y2) * sw + x] + 1.0f * r_f[static_cast<size_t>(y2) * sw + x2];
+                r_tmp[static_cast<size_t>(y) * sw + x] = sum / 16.0f;
+            }
+        }
+        r_f.swap(r_tmp);
+    }
+
+    // Dilatação 5x5 sobre g (asfalto secundário) para recortar encontros, e erosão 5x5 sobre valid_s
+    for (int y = 0; y < sh; ++y)
+    {
+        for (int x = 0; x < sw; ++x)
+        {
+            unsigned char gm = 0, vm = 255;
+            for (int dx = -2; dx <= 2; ++dx)
+            {
+                int nx = std::max(0, std::min(sw - 1, x + dx));
+                size_t ni = static_cast<size_t>(y) * sw + nx;
+                gm = std::max(gm, g_dil[ni]);
+                vm = std::min(vm, valid_s[ni]);
+            }
+            g_tmp[static_cast<size_t>(y) * sw + x]     = gm;
+            valid_tmp[static_cast<size_t>(y) * sw + x] = vm;
+        }
+    }
+    for (int y = 0; y < sh; ++y)
+    {
+        for (int x = 0; x < sw; ++x)
+        {
+            unsigned char gm = 0, vm = 255;
+            for (int dy = -2; dy <= 2; ++dy)
+            {
+                int ny = std::max(0, std::min(sh - 1, y + dy));
+                size_t ni = static_cast<size_t>(ny) * sw + x;
+                gm = std::max(gm, g_tmp[ni]);
+                vm = std::min(vm, valid_tmp[ni]);
+            }
+            g_dil[static_cast<size_t>(y) * sw + x]   = gm;
+            valid_s[static_cast<size_t>(y) * sw + x] = vm;
+        }
+    }
+
+    struct MSEdge { glm::vec2 p0, p1; uint64_t k0, k1; };
+    auto qkey = [](const glm::vec2& p) -> uint64_t {
+        int32_t qx = static_cast<int32_t>(std::llround(p.x * 100.0f));
+        int32_t qz = static_cast<int32_t>(std::llround(p.y * 100.0f));
+        return (static_cast<uint64_t>(static_cast<uint32_t>(qx)) << 32) | static_cast<uint64_t>(static_cast<uint32_t>(qz));
+    };
+
+    const float dx_w = g_TerrainWorldWidth  / static_cast<float>(sw);
+    const float dz_w = g_TerrainWorldDepth  / static_cast<float>(sh);
+    const float iso  = 0.48f;
+
+    std::vector<MSEdge> raw_edges;
+    std::unordered_map<uint64_t, std::vector<int>> adj;
+
+    static const int kMSTable[16][5] = {
+        {-1,-1,-1,-1,-1}, {3,0,-1,-1,-1}, {0,1,-1,-1,-1}, {3,1,-1,-1,-1},
+        {1,2,-1,-1,-1}, {3,0,1,2,-1}, {0,2,-1,-1,-1}, {3,2,-1,-1,-1},
+        {2,3,-1,-1,-1}, {2,0,-1,-1,-1}, {0,1,2,3,-1}, {2,1,-1,-1,-1},
+        {1,3,-1,-1,-1}, {1,0,-1,-1,-1}, {0,3,-1,-1,-1}, {-1,-1,-1,-1,-1}
+    };
+
+    for (int y = 0; y < sh - 1; ++y)
+    {
+        for (int x = 0; x < sw - 1; ++x)
+        {
+            size_t i00 = static_cast<size_t>(y) * sw + x;
+            if (g_dil[i00] > 45 || valid_s[i00] < 128)
+                continue;
+
+            float v00 = r_f[i00];
+            float v10 = r_f[i00 + 1];
+            float v11 = r_f[i00 + sw + 1];
+            float v01 = r_f[i00 + sw];
+
+            int c = ((v00 >= iso) ? 1 : 0) |
+                    ((v10 >= iso) ? 2 : 0) |
+                    ((v11 >= iso) ? 4 : 0) |
+                    ((v01 >= iso) ? 8 : 0);
+            if (c == 0 || c == 15)
+                continue;
+
+            auto interp = [&](float ax, float ay, float bx, float by, float va, float vb) -> glm::vec2 {
+                float den = vb - va;
+                float t = (std::fabs(den) < 1e-6f) ? 0.5f : std::max(0.0f, std::min(1.0f, (iso - va) / den));
+                return glm::vec2(
+                    (ax + t * (bx - ax) + 0.5f) * dx_w - 0.5f * g_TerrainWorldWidth,
+                    (ay + t * (by - ay) + 0.5f) * dz_w - 0.5f * g_TerrainWorldDepth
+                );
+            };
+
+            glm::vec2 epts[4];
+            if ((c & 1) != ((c >> 1) & 1))        epts[0] = interp(float(x), float(y), float(x+1), float(y), v00, v10);
+            if (((c >> 1) & 1) != ((c >> 2) & 1)) epts[1] = interp(float(x+1), float(y), float(x+1), float(y+1), v10, v11);
+            if (((c >> 2) & 1) != ((c >> 3) & 1)) epts[2] = interp(float(x), float(y+1), float(x+1), float(y+1), v01, v11);
+            if ((c & 1) != ((c >> 3) & 1))        epts[3] = interp(float(x), float(y), float(x), float(y+1), v00, v01);
+
+            for (int k = 0; k < 4 && kMSTable[c][k] != -1; k += 2)
+            {
+                glm::vec2 p0 = epts[kMSTable[c][k]];
+                glm::vec2 p1 = epts[kMSTable[c][k + 1]];
+                uint64_t k0 = qkey(p0), k1 = qkey(p1);
+                if (k0 == k1) continue;
+                int ei = static_cast<int>(raw_edges.size());
+                raw_edges.push_back({ p0, p1, k0, k1 });
+                adj[k0].push_back(ei);
+                adj[k1].push_back(ei);
+            }
+        }
+    }
+
+    // Encadeia segmentos em polilinhas ordenadas (extremidades abertas primeiro, depois anéis fechados)
+    struct CurbPolyline { std::vector<glm::vec2> pts; bool closed; };
+    std::vector<CurbPolyline> chains;
+    std::vector<unsigned char> used(raw_edges.size(), 0);
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (const auto& kv : adj)
+        {
+            if (pass == 0 && kv.second.size() != 1)
+                continue;
+            uint64_t start_k = kv.first;
+            for (int ei : kv.second)
+            {
+                if (used[ei]) continue;
+                used[ei] = 1;
+                const MSEdge& E = raw_edges[ei];
+                std::vector<glm::vec2> ch;
+                uint64_t cur_k = 0;
+                if (E.k0 == start_k) { ch.push_back(E.p0); ch.push_back(E.p1); cur_k = E.k1; }
+                else                 { ch.push_back(E.p1); ch.push_back(E.p0); cur_k = E.k0; }
+
+                bool closed = false;
+                while (true)
+                {
+                    if (cur_k == start_k && ch.size() >= 3)
+                    {
+                        closed = true;
+                        break;
+                    }
+                    int next_ei = -1;
+                    auto it = adj.find(cur_k);
+                    if (it != adj.end())
+                    {
+                        for (int nei : it->second)
+                        {
+                            if (!used[nei]) { next_ei = nei; break; }
+                        }
+                    }
+                    if (next_ei == -1) break;
+                    used[next_ei] = 1;
+                    const MSEdge& NE = raw_edges[next_ei];
+                    if (NE.k0 == cur_k) { ch.push_back(NE.p1); cur_k = NE.k1; }
+                    else                { ch.push_back(NE.p0); cur_k = NE.k0; }
+                }
+                chains.push_back({ std::move(ch), closed });
+            }
+        }
+    }
+
+    // Suavização de Taubin + simplificação Ramer-Douglas-Peucker para deixar o meio-fio reto e limpo
+    std::vector<CurbPolyline> clean_polys;
+    for (CurbPolyline& cp : chains)
+    {
+        float perim = 0.0f;
+        for (size_t i = 1; i < cp.pts.size(); ++i)
+            perim += std::hypot(cp.pts[i].x - cp.pts[i-1].x, cp.pts[i].y - cp.pts[i-1].y);
+        if (perim < 6.0f) continue;
+
+        std::vector<glm::vec2> sm = (cp.closed && cp.pts.size() >= 4)
+            ? std::vector<glm::vec2>(cp.pts.begin(), cp.pts.end() - 1)
+            : cp.pts;
+        size_t M = sm.size();
+        if (M < 2) continue;
+
+        if (M >= 4)
+        {
+            std::vector<glm::vec2> tmp_pts(M);
+            for (int it = 0; it < 12; ++it)
+            {
+                for (float w : { 0.50f, -0.52f })
+                {
+                    for (size_t i = 0; i < M; ++i)
+                    {
+                        if (!cp.closed && (i == 0 || i == M - 1)) { tmp_pts[i] = sm[i]; continue; }
+                        glm::vec2 prev = sm[(i + M - 1) % M];
+                        glm::vec2 next = sm[(i + 1) % M];
+                        glm::vec2 mid  = 0.5f * (prev + next);
+                        tmp_pts[i] = sm[i] + w * (mid - sm[i]);
+                    }
+                    sm.swap(tmp_pts);
+                }
+            }
+        }
+
+        std::vector<glm::vec2> simp;
+        if (cp.closed && M >= 4)
+        {
+            // Divide no vértice mais distante de sm[0] para simplificar ambas metades sem criar quina falsa
+            size_t k_far = 0;
+            float max_d2 = -1.0f;
+            for (size_t i = 1; i < M; ++i)
+            {
+                float d2 = (sm[i].x - sm[0].x) * (sm[i].x - sm[0].x) + (sm[i].y - sm[0].y) * (sm[i].y - sm[0].y);
+                if (d2 > max_d2) { max_d2 = d2; k_far = i; }
+            }
+            RDPSimplifyRange(sm, 0, k_far, 0.16f, simp);
+            sm.push_back(sm[0]);
+            RDPSimplifyRange(sm, k_far, sm.size() - 1, 0.16f, simp);
+            if (simp.size() < 3) continue;
+            simp.push_back(simp[0]);
+        }
+        else
+        {
+            RDPSimplifyRange(sm, 0, M - 1, 0.16f, simp);
+            simp.push_back(sm.back());
+            if (simp.size() < 2) continue;
+        }
+        clean_polys.push_back({ std::move(simp), cp.closed });
+    }
+
+    auto sample_r_world = [&](float wx, float wz) -> float {
+        float sx = (wx + 0.5f * g_TerrainWorldWidth) / g_TerrainWorldWidth * static_cast<float>(sw - 1);
+        float sz = (wz + 0.5f * g_TerrainWorldDepth) / g_TerrainWorldDepth * static_cast<float>(sh - 1);
+        int ix = std::max(0, std::min(sw - 1, static_cast<int>(std::lround(sx))));
+        int iz = std::max(0, std::min(sh - 1, static_cast<int>(std::lround(sz))));
+        return r_f[static_cast<size_t>(iz) * sw + ix];
+    };
+
+    std::vector<TerrainVertex> curb_verts;
+    std::vector<GLuint>        curb_indices;
+    glm::vec3 bbox_min(std::numeric_limits<float>::max());
+    glm::vec3 bbox_max(std::numeric_limits<float>::lowest());
+
+    for (const CurbPolyline& cp : clean_polys)
+    {
+        const std::vector<glm::vec2>& pts = cp.pts;
+        size_t M = pts.size(); // para fechado, pts.back() == pts.front()
+        size_t num_segs = M - 1;
+        if (num_segs < 1) continue;
+
+        // Normais externas (apontam para fora do asfalto) por segmento
+        std::vector<glm::vec2> seg_nout(num_segs);
+        for (size_t i = 0; i < num_segs; ++i)
+        {
+            glm::vec2 d = pts[i + 1] - pts[i];
+            float len = std::hypot(d.x, d.y);
+            glm::vec2 t = (len > 1e-6f) ? (d / len) : glm::vec2(1.0f, 0.0f);
+            glm::vec2 nc(-t.y, t.x);
+            glm::vec2 mid = 0.5f * (pts[i] + pts[i + 1]);
+            float rp = sample_r_world(mid.x + nc.x * 0.85f, mid.y + nc.y * 0.85f);
+            float rn = sample_r_world(mid.x - nc.x * 0.85f, mid.y - nc.y * 0.85f);
+            if (std::fabs(rp - rn) > 0.02f)
+                seg_nout[i] = (rp > rn) ? -nc : nc;
+            else if (i > 0)
+                seg_nout[i] = (nc.x * seg_nout[i-1].x + nc.y * seg_nout[i-1].y >= 0.0f) ? nc : -nc;
+            else
+                seg_nout[i] = nc;
+        }
+
+        // Normais com miter nos vértices (largura física de 20 cm: -0.03m interno .. +0.17m externo)
+        size_t num_u = cp.closed ? num_segs : M;
+        std::vector<glm::vec2> p_in(M), p_out(M);
+        for (size_t i = 0; i < M; ++i)
+        {
+            glm::vec2 n_avg;
+            glm::vec2 n_ref;
+            if (cp.closed)
+            {
+                size_t si = i % num_u;
+                glm::vec2 n0 = seg_nout[(si + num_segs - 1) % num_segs];
+                glm::vec2 n1 = seg_nout[si];
+                n_avg = n0 + n1;
+                n_ref = n1;
+            }
+            else if (i == 0)         { n_avg = seg_nout[0]; n_ref = n_avg; }
+            else if (i == M - 1)     { n_avg = seg_nout[num_segs - 1]; n_ref = n_avg; }
+            else                     { n_avg = seg_nout[i - 1] + seg_nout[i]; n_ref = seg_nout[i]; }
+
+            float alen = std::hypot(n_avg.x, n_avg.y);
+            glm::vec2 mdir = (alen > 1e-4f) ? (n_avg / alen) : n_ref;
+            float cos_m = mdir.x * n_ref.x + mdir.y * n_ref.y;
+            float mscale = 1.0f / std::max(0.55f, cos_m);
+            mscale = std::min(1.6f, mscale);
+
+            p_in[i]  = pts[i] - mdir * (0.03f * mscale);
+            p_out[i] = pts[i] + mdir * (0.17f * mscale);
+        }
+
+        // Altura do topo acompanha exatamente o terreno não-rebaixado (+1.5 cm flush anti-Z-fighting)
+        std::vector<float> y_top(M), y_bot_in(M), y_bot_out(M), arc_s(M, 0.0f);
+        for (size_t i = 0; i < M; ++i)
+        {
+            float h_edge  = SampleHeightGridBilinear(unrecessed_heights, hmW, hmH, pts[i].x, pts[i].y);
+            float h_outer = SampleHeightGridBilinear(unrecessed_heights, hmW, hmH, p_out[i].x, p_out[i].y);
+            y_top[i] = std::max(h_edge, h_outer) + 0.015f;
+            if (i > 0)
+                arc_s[i] = arc_s[i - 1] + std::hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        }
+
+        // Suaviza levemente Y_top ao longo da polilinha para o topo ficar reto longitudinalmente (sem degraus de 1m)
+        if (num_u >= 4)
+        {
+            std::vector<float> y_tmp(M);
+            for (int p = 0; p < 5; ++p)
+            {
+                for (size_t i = 0; i < num_u; ++i)
+                {
+                    if (!cp.closed && (i == 0 || i == num_u - 1)) { y_tmp[i] = y_top[i]; continue; }
+                    float yp = y_top[(i + num_u - 1) % num_u];
+                    float yn = y_top[(i + 1) % num_u];
+                    y_tmp[i] = 0.25f * yp + 0.50f * y_top[i] + 0.25f * yn;
+                }
+                for (size_t i = 0; i < num_u; ++i) y_top[i] = y_tmp[i];
+                if (cp.closed) y_top[M - 1] = y_top[0];
+            }
+        }
+
+        for (size_t i = 0; i < M; ++i)
+        {
+            float h_asph_in = SampleHeightGridBilinear(recessed_heights, hmW, hmH, p_in[i].x, p_in[i].y);
+            float h_terr_out = SampleHeightGridBilinear(recessed_heights, hmW, hmH, p_out[i].x, p_out[i].y);
+            y_bot_in[i]  = std::min(y_top[i] - 0.13f, h_asph_in - 0.06f);
+            y_bot_out[i] = std::min(y_top[i] - 0.06f, h_terr_out - 0.06f);
+        }
+
+        // Emite prismas retangulares de quina viva (90°) sem compartilhamento de normais entre topo e parede
+        for (size_t i = 0; i < num_segs; ++i)
+        {
+            glm::vec3 i_top0(p_in[i].x,   y_top[i],     p_in[i].y);
+            glm::vec3 i_top1(p_in[i+1].x, y_top[i+1],   p_in[i+1].y);
+            glm::vec3 o_top0(p_out[i].x,  y_top[i],     p_out[i].y);
+            glm::vec3 o_top1(p_out[i+1].x,y_top[i+1],   p_out[i+1].y);
+
+            glm::vec3 i_bot0(p_in[i].x,   y_bot_in[i],  p_in[i].y);
+            glm::vec3 i_bot1(p_in[i+1].x, y_bot_in[i+1],p_in[i+1].y);
+            glm::vec3 o_bot0(p_out[i].x,  y_bot_out[i], p_out[i].y);
+            glm::vec3 o_bot1(p_out[i+1].x,y_bot_out[i+1],p_out[i+1].y);
+
+            glm::vec3 n_out(seg_nout[i].x, 0.0f, seg_nout[i].y);
+            glm::vec3 n_in  = -n_out;
+
+            // Normal do topo exatamente ortogonal à inclinação longitudinal da rua e à parede lateral
+            glm::vec3 along = i_top1 - i_top0;
+            glm::vec3 n_top(
+                along.y * n_out.z - along.z * n_out.y,
+                along.z * n_out.x - along.x * n_out.z,
+                along.x * n_out.y - along.y * n_out.x
+            );
+            float tlen = std::sqrt(n_top.x*n_top.x + n_top.y*n_top.y + n_top.z*n_top.z);
+            n_top = (tlen > 1e-6f) ? (n_top / tlen) : glm::vec3(0.0f, 1.0f, 0.0f);
+            if (n_top.y < 0.0f) n_top = -n_top;
+
+            float s0 = arc_s[i], s1 = arc_s[i + 1];
+
+            // 1. Face Superior (Topo) - 90 graus com as paredes
+            AddCurbQuad(curb_verts, curb_indices, bbox_min, bbox_max,
+                        i_top0, {s0, 0.45f}, i_top1, {s1, 0.45f}, o_top1, {s1, 0.00f}, o_top0, {s0, 0.00f}, n_top);
+            // 2. Parede Lateral Interna (voltada para o asfalto e faróis do ônibus)
+            AddCurbQuad(curb_verts, curb_indices, bbox_min, bbox_max,
+                        i_top0, {s0, 0.50f}, i_bot0, {s0, 1.00f}, i_bot1, {s1, 1.00f}, i_top1, {s1, 0.50f}, n_in);
+            // 3. Parede Lateral Externa (voltada para calçada/grama)
+            AddCurbQuad(curb_verts, curb_indices, bbox_min, bbox_max,
+                        o_top0, {s0, 0.50f}, o_top1, {s1, 0.50f}, o_bot1, {s1, 1.00f}, o_bot0, {s0, 1.00f}, n_out);
+        }
+
+        // Tampas nas extremidades abertas (onde o meio-fio termina em um encontro de asfalto secundário)
+        if (!cp.closed)
+        {
+            glm::vec2 t0 = pts[1] - pts[0];
+            float l0 = std::hypot(t0.x, t0.y);
+            if (l0 > 1e-5f)
+            {
+                glm::vec3 n_cap0(-t0.x / l0, 0.0f, -t0.y / l0);
+                AddCurbQuad(curb_verts, curb_indices, bbox_min, bbox_max,
+                            {p_in[0].x, y_top[0], p_in[0].y},   {0.0f, 0.50f},
+                            {p_out[0].x, y_top[0], p_out[0].y}, {0.2f, 0.50f},
+                            {p_out[0].x, y_bot_out[0], p_out[0].y}, {0.2f, 1.00f},
+                            {p_in[0].x, y_bot_in[0], p_in[0].y},    {0.0f, 1.00f}, n_cap0);
+            }
+            size_t e = M - 1;
+            glm::vec2 te = pts[e] - pts[e - 1];
+            float le = std::hypot(te.x, te.y);
+            if (le > 1e-5f)
+            {
+                glm::vec3 n_cape(te.x / le, 0.0f, te.y / le);
+                AddCurbQuad(curb_verts, curb_indices, bbox_min, bbox_max,
+                            {p_in[e].x, y_top[e], p_in[e].y},   {0.0f, 0.50f},
+                            {p_in[e].x, y_bot_in[e], p_in[e].y},    {0.0f, 1.00f},
+                            {p_out[e].x, y_bot_out[e], p_out[e].y}, {0.2f, 1.00f},
+                            {p_out[e].x, y_top[e], p_out[e].y}, {0.2f, 0.50f}, n_cape);
+            }
+        }
+    }
+
+    if (curb_indices.empty())
+        return;
+
+    GLuint vao = 0, vbo = 0, ebo = 0;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, curb_verts.size() * sizeof(TerrainVertex), curb_verts.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, position));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, normal));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(TerrainVertex), (void*)offsetof(TerrainVertex, uv));
+    glEnableVertexAttribArray(2);
+
+    glGenBuffers(1, &ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, curb_indices.size() * sizeof(GLuint), curb_indices.data(), GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    SceneObject curb_obj;
+    curb_obj.name                   = "road_curb";
+    curb_obj.first_index            = 0;
+    curb_obj.num_indices            = curb_indices.size();
+    curb_obj.rendering_mode         = GL_TRIANGLES;
+    curb_obj.vertex_array_object_id = vao;
+    curb_obj.bbox_min               = bbox_min;
+    curb_obj.bbox_max               = bbox_max;
+    g_VirtualScene["road_curb"] = curb_obj;
+
+    printf("Malha 3D do meio-fio construida: %zu linhas, %zu triangulos (topo na altura do entorno, asfalto -10 cm).\n",
+           clean_polys.size(), curb_indices.size() / 3);
+}
+
+void DrawRoadCurbs()
+{
+    if (g_VirtualScene.find("road_curb") == g_VirtualScene.end())
+        return;
+
+    glm::mat4 model = Matrix_Identity();
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, CURB);
+    DrawVirtualObject("road_curb");
 }
 
 // ----------------------------------------------------------------------------
@@ -601,9 +1233,11 @@ void BuildHeightmapAndAddToVirtualScene(
     stbi_set_flip_vertically_on_load(false);
     int width = 0, height = 0, channels = 0;
     unsigned short* raw_pixels = stbi_load_16(filename, &width, &height, &channels, 1);
+    bool used_fallback = false;
 
     if (raw_pixels == NULL)
     {
+        used_fallback = true;
         // Fallback automático para data/vale.png caso vale_processed.png ainda não exista
         const char* fallback = "../../../data/vale.png";
         printf("\n  -> Aviso: \"%s\" nao encontrado, usando \"%s\"... ", filename, fallback);
@@ -636,8 +1270,9 @@ void BuildHeightmapAndAddToVirtualScene(
     printf("OK (%dx%dm, altitude [%.1fm .. %.3fm]).\n",
            width, height, min_altitude, min_altitude + delta_h);
 
-    // Suaviza o asfalto em float32 guiado por splatmap_0.png (inclusive após --apply do PSD)
-    SmoothTerrainAlongRoads(g_TerrainHeights, width, height, "../../../data/terrain/splatmap_0.png");
+    // Suaviza o asfalto em float32 guiado por splatmap_0.png mantendo uma cópia antes do rebaixamento (-10 cm)
+    std::vector<float> unrecessed_heights;
+    SmoothTerrainAlongRoads(g_TerrainHeights, width, height, "../../../data/terrain/splatmap_0.png", !used_fallback, &unrecessed_heights);
 
     // Carrega a máscara de área válida (gerada a partir de bruto_2012_mascara.tiff)
     // Tudo o que está em preto (0) na máscara é removido da malha 3D do cenário!
@@ -798,6 +1433,9 @@ void BuildHeightmapAndAddToVirtualScene(
     theobject.bbox_max               = bbox_max;
 
     g_VirtualScene[object_name] = theobject;
+
+    // 5. Constrói a geometria 3D real do meio-fio na borda da camada vermelha (`s0.r`), recortada por `s0.g`
+    BuildRoadCurbsAndAddToVirtualScene("../../../data/terrain/splatmap_0.png", valid_mask, width, height, unrecessed_heights, g_TerrainHeights);
 }
 
 // ----------------------------------------------------------------------------

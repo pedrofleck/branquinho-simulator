@@ -1070,7 +1070,8 @@ def process_heightmap_16bit(
         h = np.where(in_asph & (den > 1e-5), num / np.maximum(den, 1e-5), h_m)
 
     # Modifica SOMENTE dentro do asfalto; fora do asfalto permanece 100% h_m original
-    h_leveled_m = np.where(in_asph, h, h_m)
+    # Rebaixa apenas o asfalto em -10 cm, mantendo o resto do terreno e o topo do meio-fio na altura original
+    h_leveled_m = np.where(in_asph, h - 0.10, h_m)
     h_leveled = ((h_leveled_m - 33.0) / 104.043) * 65535.0
 
     # Nivelamento plano da bacia da Lagoa do Vale
@@ -1500,10 +1501,17 @@ def main():
     parser.add_argument("--outdir", default="data/terrain", help="Diretório de saída dos ativos de terreno")
     parser.add_argument("--trees-only", action="store_true", help="Regera apenas trees.txt/instances.json preservando splatmaps e heightmap atuais")
     parser.add_argument("--heightmap-only", action="store_true", help="Regera apenas vale_processed.png a partir de splatmap_0/1 existentes preservando-os")
+    parser.add_argument("--textures-only", action="store_true", help="Regera apenas as texturas placeholder (mat_0..mat_7) preservando splatmaps e heightmap")
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     data_dir = os.path.dirname(args.heightmap) or "data"
+
+    if args.textures_only:
+        print(f"Regerando texturas placeholder em '{args.outdir}'...")
+        generate_placeholder_textures(args.outdir)
+        print("Concluído (--textures-only)! Texturas atualizadas preservando splatmaps e heightmap.")
+        return
 
     if args.heightmap_only:
         s0 = np.array(Image.open(os.path.join(args.outdir, "splatmap_0.png")).convert("RGBA"), dtype=np.uint8)
