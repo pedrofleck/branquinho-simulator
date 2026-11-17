@@ -31,6 +31,7 @@ Contexto do projeto: Simulador do ônibus circular da UFRGS ("Branquinho") desen
 - `cgvis-base-opengl/include/matrices.h`: Funções manuais de transformações afins e projeções.
 - `data/branquinho.obj` e `data/branquinho.mtl`: Modelo do ônibus Mascarello Gran Midi.
 - `SPEC.md`: Especificação aprovada pela disciplina.
+- `TERRAIN_GUIDE.md`: Documentação técnica completa do pipeline de terreno 16-bit (`vale.png`/`vale_processed.png`), splatmaps de 8 materiais, edição visual de máscaras no Affinity Photo (`data/terrain/terreno_editavel.psd` + `tools/terrain_psd_tool.cpp`), controles atuais de câmera/iluminação e arquitetura planejada de colisões na borda do asfalto. **Agentes trabalhando em terreno, texturas/PSD ou colisões devem ler este arquivo primeiro.**
 
 ---
 

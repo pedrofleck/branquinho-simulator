@@ -29,6 +29,9 @@
 #include <set>
 #include <limits>
 #include <algorithm>
+#ifdef _WIN32
+#include <sys/stat.h>
+#endif
 
 #include <stb_image.h>
 #include <glm/gtc/type_ptr.hpp>
@@ -1143,6 +1146,25 @@ static bool LoadTextureArray(const std::vector<std::string>& filenames, bool fli
 // ----------------------------------------------------------------------------
 void LoadTerrainTextures()
 {
+#ifdef _WIN32
+    // Se o arquivo editável do Affinity Photo (terreno_editavel.psd) for mais recente que
+    // o splatmap_0.png, aplica as alterações automaticamente antes de carregar a cena.
+    struct stat st_psd, st_splat, st_tool;
+    if (stat("../../../data/terrain/terreno_editavel.psd", &st_psd) == 0 &&
+        stat("../../../tools/terrain_psd_tool.exe", &st_tool) == 0)
+    {
+        bool needs_apply = (stat("../../../data/terrain/splatmap_0.png", &st_splat) != 0) ||
+                           (st_psd.st_mtime > st_splat.st_mtime);
+        if (needs_apply)
+        {
+            printf("Detectada edicao em terreno_editavel.psd -> atualizando splatmaps e arvores...\n");
+            int rc = std::system("..\\..\\..\\tools\\terrain_psd_tool.exe --apply");
+            if (rc != 0)
+                printf("Aviso: Falha ao executar terrain_psd_tool.exe (codigo %d).\n", rc);
+        }
+    }
+#endif
+
     bool ok0 = LoadTextureImageRGBA("../../../data/terrain/splatmap_0.png", false, GL_CLAMP_TO_EDGE, true); // Unit 3
     bool ok1 = LoadTextureImageRGBA("../../../data/terrain/splatmap_1.png", false, GL_CLAMP_TO_EDGE, true); // Unit 4
     bool ok2 = LoadTextureImage("../../../data/terrain/macro_albedo.png",   false, GL_CLAMP_TO_EDGE, true); // Unit 5

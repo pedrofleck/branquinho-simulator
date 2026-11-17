@@ -40,3 +40,6 @@ desktop.ini
 *~
 *.swp
 .vs/
+
+# --- Arquivo PSD local editável (gerado em 1s via terrain_psd_tool.exe --init) ---
+data/terrain/terreno_editavel.psd
