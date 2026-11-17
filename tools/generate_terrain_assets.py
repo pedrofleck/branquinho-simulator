@@ -1020,69 +1020,58 @@ def build_macro_albedo_4k(
 
 def process_heightmap_16bit(
     vale_png_path: str,
-    snapped_corridors,
+    splat0_2k: np.ndarray,
     water_bin_2k: np.ndarray,
     out_path: str
 ) -> np.ndarray:
     """
-    Refina o heightmap 16-bit (`data/vale.png` -> `data/vale_processed.png`, 1930x1703):
-      1. Aplaina a inclinação transversal (cross-slope) das vias preservando as subidas/descidas;
+    Refina o heightmap 16-bit (`data/vale.png` -> `data/vale_processed.png`, 1930x1703)
+    atuando SOMENTE dentro dos pixels de asfalto (`splatmap_0.r + splatmap_0.g`):
+      1. Difusão geodésica 3x3 restrita ao interior do asfalto (zero modificação fora
+         do asfalto ou nas encostas vizinhas, e zero vazamento entre pistas paralelas
+         em alturas diferentes);
       2. Nivela o espelho da Lagoa do Vale.
     """
     img_16 = Image.open(vale_png_path)
     h_raw = np.array(img_16, dtype=np.uint16)
     H, W = h_raw.shape
-    h_float = h_raw.astype(np.float32)
+    h_m = 33.0 + (h_raw.astype(np.float32) / 65535.0) * 104.043
 
-    target_sum = np.zeros((H, W), dtype=np.float32)
-    weight_sum = np.zeros((H, W), dtype=np.float32)
+    r = np.array(Image.fromarray(splat0_2k[:, :, 0], mode="L").resize((W, H), resample=Image.Resampling.BILINEAR), dtype=np.float32) / 255.0
+    g = np.array(Image.fromarray(splat0_2k[:, :, 1], mode="L").resize((W, H), resample=Image.Resampling.BILINEAR), dtype=np.float32) / 255.0
+    w_asph = np.clip(r + g, 0.0, 1.0)
 
-    for corr in snapped_corridors:
-        pts = np.array(corr["points"], dtype=np.float32)
-        if len(pts) < 4:
-            continue
-        px = np.clip(np.round(pts[:, 0]).astype(np.int32), 0, W - 1)
-        pz = np.clip(np.round(pts[:, 1]).astype(np.int32), 0, H - 1)
-        center_h = h_float[pz, px]
+    # Atua estritamente dentro do asfalto (w_asph > 0.45) e fora de degraus de muro (> 0.85 m/px)
+    gy_raw, gx_raw = np.gradient(h_m)
+    wall_step = np.hypot(gx_raw, gy_raw) > 0.85
+    in_asph = (w_asph > 0.45) & (h_raw > 10) & (~wall_step)
 
-        k_len = min(15, len(center_h))
-        if k_len >= 5:
-            kernel = np.ones(k_len, dtype=np.float32) / float(k_len)
-            pad = k_len // 2
-            padded = np.pad(center_h, (pad, pad), mode="edge")
-            center_h = np.convolve(padded, kernel, mode="valid")[:len(center_h)]
+    asph_u8 = in_asph.astype(np.uint8) * 255
+    inner_asph = np.array(Image.fromarray(asph_u8, mode="L").filter(ImageFilter.MinFilter(3))) > 127
 
-        half_w = 0.5 * corr["width_m"]
-        shoulder_w = half_w + 5.0
-        r_int = int(math.ceil(shoulder_w))
+    # Interior da pista tem peso 1.0; borda de 1px dentro do asfalto tem peso 0.15 para não puxar encostas;
+    # fora do asfalto tem peso 0.0 (barreira total entre pistas paralelas).
+    w_node = np.where(inner_asph, 1.0, np.where(in_asph, 0.15, 0.0)).astype(np.float32)
 
-        for idx in range(len(pts)):
-            cx, cz = pts[idx, 0], pts[idx, 1]
-            ch = center_h[idx]
-            x0 = max(0, int(cx) - r_int)
-            x1 = min(W - 1, int(cx) + r_int)
-            z0 = max(0, int(cz) - r_int)
-            z1 = min(H - 1, int(cz) + r_int)
+    h = h_m.copy()
+    for _ in range(35):
+        p_wh = np.pad(w_node * h, 1, mode="edge")
+        p_w  = np.pad(w_node,     1, mode="edge")
+        num = (
+            1.2 * p_wh[1:-1, 1:-1] +
+            1.0 * (p_wh[:-2, 1:-1] + p_wh[2:, 1:-1] + p_wh[1:-1, :-2] + p_wh[1:-1, 2:]) +
+            0.7 * (p_wh[:-2, :-2]  + p_wh[:-2, 2:]  + p_wh[2:, :-2]  + p_wh[2:, 2:])
+        )
+        den = (
+            1.2 * p_w[1:-1, 1:-1] +
+            1.0 * (p_w[:-2, 1:-1] + p_w[2:, 1:-1] + p_w[1:-1, :-2] + p_w[1:-1, 2:]) +
+            0.7 * (p_w[:-2, :-2]  + p_w[:-2, 2:]  + p_w[2:, :-2]  + p_w[2:, 2:])
+        )
+        h = np.where(in_asph & (den > 1e-5), num / np.maximum(den, 1e-5), h_m)
 
-            yy, xx = np.mgrid[z0:z1 + 1, x0:x1 + 1]
-            dist = np.hypot(xx - cx, yy - cz)
-            w_local = np.where(
-                dist <= half_w,
-                1.0,
-                np.where(
-                    dist < shoulder_w,
-                    0.5 * (1.0 + np.cos(math.pi * (dist - half_w) / (shoulder_w - half_w))),
-                    0.0
-                )
-            ).astype(np.float32)
-
-            target_sum[z0:z1 + 1, x0:x1 + 1] += ch * w_local
-            weight_sum[z0:z1 + 1, x0:x1 + 1] += w_local
-
-    has_road = weight_sum > 1e-4
-    road_target = np.where(has_road, target_sum / np.maximum(weight_sum, 1e-4), h_float)
-    blend_alpha = np.clip(weight_sum, 0.0, 1.0) * 0.85
-    h_leveled = h_float * (1.0 - blend_alpha) + road_target * blend_alpha
+    # Modifica SOMENTE dentro do asfalto; fora do asfalto permanece 100% h_m original
+    h_leveled_m = np.where(in_asph, h, h_m)
+    h_leveled = ((h_leveled_m - 33.0) / 104.043) * 65535.0
 
     # Nivelamento plano da bacia da Lagoa do Vale
     water_grid = np.array(
@@ -1510,10 +1499,21 @@ def main():
     parser.add_argument("--heightmap", default="data/vale.png", help="Heightmap 16-bit de entrada")
     parser.add_argument("--outdir", default="data/terrain", help="Diretório de saída dos ativos de terreno")
     parser.add_argument("--trees-only", action="store_true", help="Regera apenas trees.txt/instances.json preservando splatmaps e heightmap atuais")
+    parser.add_argument("--heightmap-only", action="store_true", help="Regera apenas vale_processed.png a partir de splatmap_0/1 existentes preservando-os")
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     data_dir = os.path.dirname(args.heightmap) or "data"
+
+    if args.heightmap_only:
+        s0 = np.array(Image.open(os.path.join(args.outdir, "splatmap_0.png")).convert("RGBA"), dtype=np.uint8)
+        s1 = np.array(Image.open(os.path.join(args.outdir, "splatmap_1.png")).convert("RGBA"), dtype=np.uint8)
+        water_bin_2k = s1[:, :, 2] > 100
+        vale_proc_path = os.path.join(data_dir, "vale_processed.png")
+        print(f"Suavizando vias em '{vale_proc_path}' a partir de splatmap_0/1 existentes...")
+        process_heightmap_16bit(args.heightmap, s0, water_bin_2k, vale_proc_path)
+        print(f"Concluído (--heightmap-only)! Heightmap salvo em '{vale_proc_path}'.")
+        return
 
     if args.trees_only:
         s0 = np.array(Image.open(os.path.join(args.outdir, "splatmap_0.png")).convert("RGBA"), dtype=np.uint8)
@@ -1609,10 +1609,10 @@ def main():
     macro_4k = build_macro_albedo_4k(sat_4k, valid_2k, unocc_2k, bldg_bin_2k)
     Image.fromarray(macro_4k, mode="RGB").save(os.path.join(args.outdir, "macro_albedo.png"))
 
-    # 5. Nivelamento de pistas e lagoa no heightmap 16-bit
+    # 5. Nivelamento e suavização das pistas e lagoa no heightmap 16-bit
     vale_proc_path = os.path.join(data_dir, "vale_processed.png")
-    print(f"[5/6] Nivelando pistas em '{vale_proc_path}' (16-bit)...")
-    h_uint16 = process_heightmap_16bit(args.heightmap, snapped_corridors, water_bin_2k, vale_proc_path)
+    print(f"[5/6] Nivelando e suavizando pistas em '{vale_proc_path}' (16-bit)...")
+    h_uint16 = process_heightmap_16bit(args.heightmap, splat0, water_bin_2k, vale_proc_path)
 
     # 6. 8 Texturas placeholder seamless + árvore 3D + instâncias
     print("[6/6] Gerando as 8 texturas placeholder (mat_0..mat_7), 'data/tree.obj' e instâncias...")

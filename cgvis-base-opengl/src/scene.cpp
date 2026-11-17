@@ -434,6 +434,148 @@ struct TerrainVertex
     glm::vec2 uv;
 };
 
+// Suaviza o terreno em float32 estritamente DENTRO do asfalto (`splatmap_0.r + splatmap_0.g`)
+// por difusão geodésica 3x3: não altera encostas vizinhas e não mistura pistas paralelas em alturas distintas.
+static void SmoothTerrainAlongRoads(
+    std::vector<float>& heights,
+    int                 W,
+    int                 H,
+    const char*         splat0_filename
+)
+{
+    int sw = 0, sh = 0, sc = 0;
+    stbi_set_flip_vertically_on_load(false);
+    unsigned char* splat0 = stbi_load(splat0_filename, &sw, &sh, &sc, 4);
+    if (splat0 == NULL)
+        return;
+
+    const size_t N = static_cast<size_t>(W) * static_cast<size_t>(H);
+    std::vector<unsigned char> in_asph(N, 0);
+    std::vector<float> w_asph(N, 0.0f);
+
+    for (int y = 0; y < H; ++y)
+    {
+        float sy = (static_cast<float>(y) + 0.5f) * static_cast<float>(sh) / static_cast<float>(H) - 0.5f;
+        sy = std::max(0.0f, std::min(static_cast<float>(sh - 1), sy));
+        int y0 = static_cast<int>(sy);
+        int y1 = std::min(sh - 1, y0 + 1);
+        float ty = sy - static_cast<float>(y0);
+
+        for (int x = 0; x < W; ++x)
+        {
+            float sx = (static_cast<float>(x) + 0.5f) * static_cast<float>(sw) / static_cast<float>(W) - 0.5f;
+            sx = std::max(0.0f, std::min(static_cast<float>(sw - 1), sx));
+            int x0 = static_cast<int>(sx);
+            int x1 = std::min(sw - 1, x0 + 1);
+            float tx = sx - static_cast<float>(x0);
+
+            const unsigned char* p00 = &splat0[(static_cast<size_t>(y0) * sw + x0) * 4];
+            const unsigned char* p10 = &splat0[(static_cast<size_t>(y0) * sw + x1) * 4];
+            const unsigned char* p01 = &splat0[(static_cast<size_t>(y1) * sw + x0) * 4];
+            const unsigned char* p11 = &splat0[(static_cast<size_t>(y1) * sw + x1) * 4];
+
+            auto sample_ch = [&](int c) -> float {
+                float a = p00[c] * (1.0f - tx) + p10[c] * tx;
+                float b = p01[c] * (1.0f - tx) + p11[c] * tx;
+                return (a * (1.0f - ty) + b * ty) / 255.0f;
+            };
+
+            float r = sample_ch(0);
+            float g = sample_ch(1);
+            size_t idx = static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x);
+            w_asph[idx] = std::max(0.0f, std::min(1.0f, r + g));
+        }
+    }
+    stbi_image_free(splat0);
+
+    std::vector<size_t> active_indices;
+    active_indices.reserve(N / 8);
+
+    for (int y = 0; y < H; ++y)
+    {
+        int yU = std::max(0, y - 1);
+        int yD = std::min(H - 1, y + 1);
+        for (int x = 0; x < W; ++x)
+        {
+            size_t idx = static_cast<size_t>(y) * static_cast<size_t>(W) + static_cast<size_t>(x);
+            if (w_asph[idx] <= 0.45f || heights[idx] <= 33.02f)
+                continue;
+
+            int xL = std::max(0, x - 1);
+            int xR = std::min(W - 1, x + 1);
+            float dx = (xR > xL) ? (heights[static_cast<size_t>(y) * W + xR] - heights[static_cast<size_t>(y) * W + xL]) / static_cast<float>(xR - xL) : 0.0f;
+            float dy = (yD > yU) ? (heights[static_cast<size_t>(yD) * W + x] - heights[static_cast<size_t>(yU) * W + x]) / static_cast<float>(yD - yU) : 0.0f;
+            float grad = std::hypot(dx, dy);
+            if (grad <= 0.85f)
+            {
+                in_asph[idx] = 1;
+                active_indices.push_back(idx);
+            }
+        }
+    }
+
+    std::vector<float> w_node(N, 0.0f);
+    for (size_t idx : active_indices)
+    {
+        int x = static_cast<int>(idx % static_cast<size_t>(W));
+        int y = static_cast<int>(idx / static_cast<size_t>(W));
+        bool all_inner = true;
+        for (int dy = -1; dy <= 1 && all_inner; ++dy)
+        {
+            int ny = std::max(0, std::min(H - 1, y + dy));
+            for (int dx = -1; dx <= 1; ++dx)
+            {
+                int nx = std::max(0, std::min(W - 1, x + dx));
+                if (!in_asph[static_cast<size_t>(ny) * static_cast<size_t>(W) + nx])
+                {
+                    all_inner = false;
+                    break;
+                }
+            }
+        }
+        w_node[idx] = all_inner ? 1.0f : 0.15f;
+    }
+
+    std::vector<float> h_cur(heights);
+    std::vector<float> h_next(heights);
+    static const float kKernel[3][3] = {
+        { 0.7f, 1.0f, 0.7f },
+        { 1.0f, 1.2f, 1.0f },
+        { 0.7f, 1.0f, 0.7f }
+    };
+
+    for (int it = 0; it < 35; ++it)
+    {
+        for (size_t idx : active_indices)
+        {
+            int x = static_cast<int>(idx % static_cast<size_t>(W));
+            int y = static_cast<int>(idx / static_cast<size_t>(W));
+            double num = 0.0;
+            double den = 0.0;
+            for (int dy = -1; dy <= 1; ++dy)
+            {
+                int ny = std::max(0, std::min(H - 1, y + dy));
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    int nx = std::max(0, std::min(W - 1, x + dx));
+                    size_t nidx = static_cast<size_t>(ny) * static_cast<size_t>(W) + nx;
+                    double kw = static_cast<double>(kKernel[dy + 1][dx + 1]) * static_cast<double>(w_node[nidx]);
+                    num += kw * static_cast<double>(h_cur[nidx]);
+                    den += kw;
+                }
+            }
+            if (den > 1e-5)
+                h_next[idx] = static_cast<float>(num / den);
+        }
+        h_cur.swap(h_next);
+    }
+
+    for (size_t idx : active_indices)
+        heights[idx] = h_cur[idx];
+
+    printf("Suavizacao geodesica estrita no asfalto aplicada (%zu vertices, zero bordas/encostas alteradas).\n", active_indices.size());
+}
+
 // ----------------------------------------------------------------------------
 // BuildHeightmapAndAddToVirtualScene()
 // Carrega o mapa topográfico do Campus do Vale (SIRGAS 2000 / UTM 22S - EPSG:31982)
@@ -493,6 +635,9 @@ void BuildHeightmapAndAddToVirtualScene(
 
     printf("OK (%dx%dm, altitude [%.1fm .. %.3fm]).\n",
            width, height, min_altitude, min_altitude + delta_h);
+
+    // Suaviza o asfalto em float32 guiado por splatmap_0.png (inclusive após --apply do PSD)
+    SmoothTerrainAlongRoads(g_TerrainHeights, width, height, "../../../data/terrain/splatmap_0.png");
 
     // Carrega a máscara de área válida (gerada a partir de bruto_2012_mascara.tiff)
     // Tudo o que está em preto (0) na máscara é removido da malha 3D do cenário!
