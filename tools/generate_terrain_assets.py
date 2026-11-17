@@ -1463,21 +1463,23 @@ def sample_trees_and_export_instances(
     allowed = canopy_grid & valid_inner & (~road_clear_grid)
 
     rng = np.random.default_rng(2026)
-    cell_step = 11
+    cell_step = 6
     trees = []
     half_w, half_h = 0.5 * float(W), 0.5 * float(H)
 
     for gz in range(8, H - 8, cell_step):
         for gx in range(8, W - 8, cell_step):
-            jx = gx + int(rng.integers(-3, 4))
-            jz = gz + int(rng.integers(-3, 4))
+            jx_f = float(gx) + float(rng.uniform(-2.5, 2.5))
+            jz_f = float(gz) + float(rng.uniform(-2.5, 2.5))
+            jx = int(round(jx_f))
+            jz = int(round(jz_f))
             if not (4 <= jx < W - 4 and 4 <= jz < H - 4):
                 continue
             if not allowed[jz, jx]:
                 continue
 
-            wx = float(jx) - half_w
-            wz = float(jz) - half_h
+            wx = jx_f - half_w
+            wz = jz_f - half_h
             if wx * wx + wz * wz < 16.0 * 16.0:
                 continue
 
@@ -1507,10 +1509,49 @@ def main():
     parser.add_argument("--sat", default="tools/bruto_2012_mascara.tiff", help="Imagem .tif/.tiff já mascarada")
     parser.add_argument("--heightmap", default="data/vale.png", help="Heightmap 16-bit de entrada")
     parser.add_argument("--outdir", default="data/terrain", help="Diretório de saída dos ativos de terreno")
+    parser.add_argument("--trees-only", action="store_true", help="Regera apenas trees.txt/instances.json preservando splatmaps e heightmap atuais")
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     data_dir = os.path.dirname(args.heightmap) or "data"
+
+    if args.trees_only:
+        s0 = np.array(Image.open(os.path.join(args.outdir, "splatmap_0.png")).convert("RGBA"), dtype=np.uint8)
+        s1 = np.array(Image.open(os.path.join(args.outdir, "splatmap_1.png")).convert("RGBA"), dtype=np.uint8)
+        valid_grid = np.array(Image.open(os.path.join(args.outdir, "valid_mask.png")).convert("L"), dtype=np.uint8) > 127
+        hm_path = os.path.join(data_dir, "vale_processed.png")
+        if not os.path.exists(hm_path):
+            hm_path = args.heightmap
+        h_uint16 = np.array(Image.open(hm_path), dtype=np.uint16)
+        H, W = h_uint16.shape
+
+        sat_2k = load_and_warp_satellite(args.sat, 2048, 2048).astype(np.float32)
+        sat_2k = harmonize_southeast_seam(sat_2k.astype(np.uint8), np.array(
+            Image.fromarray(valid_grid.astype(np.uint8) * 255, mode="L").resize((2048, 2048), resample=Image.Resampling.BILINEAR)
+        ) > 127).astype(np.float32)
+        R, G, B = sat_2k[:, :, 0], sat_2k[:, :, 1], sat_2k[:, :, 2]
+        lum = 0.299 * R + 0.587 * G + 0.114 * B
+        exg = (2.0 * G - R - B) / 255.0
+
+        road_2k = (s0[:, :, 0].astype(np.int32) + s0[:, :, 1].astype(np.int32)) > 90
+        forest_2k = s1[:, :, 0] > 90
+        water_2k = s1[:, :, 2] > 100
+        bldg_2k = s1[:, :, 3] > 100
+        valid_2k = np.array(
+            Image.fromarray(valid_grid.astype(np.uint8) * 255, mode="L").resize((2048, 2048), resample=Image.Resampling.BILINEAR)
+        ) > 127
+
+        sat_canopy = ((exg > 0.055) & (lum < 124.0)) | ((lum < 85.0) & (exg > 0.015))
+        canopy_mask_2k = valid_2k & (~water_2k) & (~bldg_2k) & (~road_2k) & (sat_canopy | forest_2k)
+
+        # Sem raio de segurança de 4m ao redor do asfalto: evita apenas pixels exatamente sobre a pista
+        r_ch = Image.fromarray(s0[:, :, 0], mode="L").resize((W, H), resample=Image.Resampling.BILINEAR)
+        g_ch = Image.fromarray(s0[:, :, 1], mode="L").resize((W, H), resample=Image.Resampling.BILINEAR)
+        road_clear_grid = (np.array(r_ch, dtype=np.int32) + np.array(g_ch, dtype=np.int32)) > 90
+
+        num_trees = sample_trees_and_export_instances(canopy_mask_2k, road_clear_grid, valid_grid, h_uint16, args.outdir)
+        print(f"Concluído (--trees-only)! {num_trees} árvores instanciadas preservando os splatmaps existentes.")
+        return
 
     # Remove texturas antigas de detalhe se existirem para manter o diretório limpo
     for old_name in ("detail_asphalt.png", "detail_sidewalk.png", "detail_grass.png", "detail_dirt.png", "detail_water.png"):
@@ -1555,7 +1596,7 @@ def main():
     edge_ring_2k = np.clip(dilated_edge - np.clip(main_road_2k + sec_road_2k, 0.0, 1.0), 0.0, 1.0)
 
     snapped_corridors = snap_corridors_dijkstra(sat_grid, valid_grid, road_cv_grid=road_cv_grid, se_path_override=se_path)
-    road_clear_grid = np.array(Image.fromarray(road_cv_grid.astype(np.uint8) * 255, mode="L").filter(ImageFilter.MaxFilter(9)), dtype=np.uint8) > 127
+    road_clear_grid = road_cv_grid
 
     # 4. Splatmaps (8 canais) + Macro Albedo 4K
     print("[4/6] Classificando 8 materiais -> splatmap_0.png, splatmap_1.png e macro_albedo.png...")

@@ -81,16 +81,14 @@ Como editar pesos RGBA com canal Alpha manualmente em editores de imagem é dif�
   - Camadas superiores têm prioridade automática: pintar asfalto em `0_Asfalto_Principal` cobre a grama/mata abaixo sem precisar apagar manualmente as camadas inferiores; usar a Borracha (`E`) em `0_Asfalto_Principal` revela a camada abaixo (`3_Grama_Base`).
   - Se todas as 8 camadas de material estiverem transparentes (`Alpha = 0`), o pixel permanece vazio (fora da área válida, descartado pelo shader).
 - **Árvores 3D**:
-  - Na primeira execução do `--apply`, a lista original de árvores é preservada em `data/terrain/trees_base.txt`.
-  - A cada `--apply`, `data/terrain/trees.txt` é reexportado removendo qualquer árvore num raio de ~4m sobre pixels onde `(asphalt_main + asphalt_sec) > 0.25`. Se um trecho de asfalto errado for apagado no PSD, as árvores originais daquele local voltam na próxima atualização.
+  - As árvores 3D em `data/terrain/trees.txt` são geradas por `tools/generate_terrain_assets.py` sobre as copas detectadas fora das pistas exatas; o `--apply` do `terrain_psd_tool.exe` atualiza apenas os splatmaps e não remove árvores automaticamente ao redor de novo asfalto.
 - **Compatibilidade PSD**:
   - `ReadPSD` suporta compressão `0` (Raw), `1` (PackBits RLE), `2` (ZIP) e `3` (ZIP + Predictor), bounding boxes recortadas por camada, nomes Pascal ou Unicode (`luni`), e User Layer Masks (`channel_id == -2`).
 
-### 3.3 Sincronização Automática & Comandos em Outro Computador
-- **Automático ao abrir o simulador**: Em `cgvis-base-opengl/src/scene.cpp` (`LoadTerrainTextures()`), no Windows, se `data/terrain/terreno_editavel.psd` tiver timestamp (`st_mtime`) mais recente que `data/terrain/splatmap_0.png` e `tools/terrain_psd_tool.exe` existir, o simulador executa `..\..\..\tools\terrain_psd_tool.exe --apply` automaticamente antes de carregar os splatmaps e as árvores.
-- **Execução manual** (na raiz do repositório):
+### 3.3 Execução Manual & Comandos em Outro Computador
+- **Execução manual** (`terreno_editavel.psd` e `*.exe` estão no `.gitignore`, então o simulador não chama a ferramenta em tempo de execução — após editar o PSD no Affinity Photo, rode na raiz do repositório antes de abrir o jogo):
   ```powershell
-  # Aplicar edições do Affinity Photo -> splatmap_0.png, splatmap_1.png e trees.txt:
+  # Aplicar edições do Affinity Photo -> splatmap_0.png e splatmap_1.png:
   .\tools\terrain_psd_tool.exe --apply
 
   # (Apenas se precisar recriar o .psd do zero a partir dos splatmaps atuais - SOBRESCREVE edições no PSD!):

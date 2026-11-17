@@ -13,9 +13,8 @@
 //
 //   terrain_psd_tool.exe --apply
 //       Lê `data/terrain/terreno_editavel.psd` editado no Affinity Photo,
-//       compõe os materiais respeitando a hierarquia das camadas, atualiza
-//       `splatmap_0.png` e `splatmap_1.png`, e filtra `trees.txt` removendo
-//       árvores que fiquem sobre o asfalto editado.
+//       compõe os materiais respeitando a hierarquia das camadas e atualiza
+//       `splatmap_0.png` e `splatmap_1.png`.
 //
 // Compilação standalone (MSYS2 UCRT64, sem DLL externa):
 //   g++ -O3 -static tools/terrain_psd_tool.cpp -Icgvis-base-opengl/include -lz -o tools/terrain_psd_tool.exe
@@ -1114,101 +1113,8 @@ int RunInit(const std::string& prefix)
 }
 
 // ----------------------------------------------------------------------------
-// Operação --apply: Lê data/terrain/terreno_editavel.psd e atualiza jogo
+// Operação --apply: Lê data/terrain/terreno_editavel.psd e atualiza os splatmaps
 // ----------------------------------------------------------------------------
-int FilterTreesByAsphalt(
-    const std::string&          terrain_dir,
-    int                         W,
-    int                         H,
-    const std::vector<float>&   asphalt_mask
-)
-{
-    std::string trees_path     = terrain_dir + "trees.txt";
-    std::string trees_src_path = terrain_dir + "trees_base.txt";
-
-    // Na primeira execução, preserva a lista base de árvores em `trees_base.txt`
-    // para que, se o usuário apagar asfalto pintado por engano, as árvores retornem
-    if (!FileExists(trees_src_path) && FileExists(trees_path))
-    {
-        std::ifstream src(trees_path, std::ios::binary);
-        std::ofstream dst(trees_src_path, std::ios::binary);
-        dst << src.rdbuf();
-    }
-
-    const std::string& input_path = FileExists(trees_src_path) ? trees_src_path : trees_path;
-    std::ifstream in(input_path);
-    if (!in.is_open())
-        return 0;
-
-    struct TreeLine
-    {
-        float x, y, z, scale, yaw;
-    };
-    std::vector<TreeLine> kept;
-    std::string line;
-    int removed = 0;
-
-    const float world_w = 1930.0f;
-    const float world_d = 1703.0f;
-
-    while (std::getline(in, line))
-    {
-        if (line.empty() || line[0] == '#')
-            continue;
-        std::istringstream iss(line);
-        TreeLine t;
-        if (!(iss >> t.x >> t.y >> t.z >> t.scale >> t.yaw))
-            continue;
-
-        float u = (t.x + 0.5f * world_w) / world_w;
-        float v = (t.z + 0.5f * world_d) / world_d;
-        int   px = std::max(0, std::min(W - 1, static_cast<int>(std::lround(u * static_cast<float>(W - 1)))));
-        int   py = std::max(0, std::min(H - 1, static_cast<int>(std::lround(v * static_cast<float>(H - 1)))));
-
-        // Verifica raio de segurança de ~4m ao redor do tronco para não invadir a pista
-        bool on_road = false;
-        for (int dy = -4; dy <= 4 && !on_road; ++dy)
-        {
-            int ny = std::max(0, std::min(H - 1, py + dy));
-            for (int dx = -4; dx <= 4; ++dx)
-            {
-                if (dx * dx + dy * dy > 16) continue;
-                int nx = std::max(0, std::min(W - 1, px + dx));
-                if (asphalt_mask[static_cast<size_t>(ny) * W + nx] > 0.25f)
-                {
-                    on_road = true;
-                    break;
-                }
-            }
-        }
-
-        if (on_road)
-            ++removed;
-        else
-            kept.push_back(t);
-    }
-    in.close();
-
-    std::ofstream out(trees_path, std::ios::trunc);
-    if (!out.is_open())
-        return -1;
-
-    out << "# " << kept.size() << " tree instances: world_x world_y world_z scale yaw\n";
-    out.setf(std::ios::fixed);
-    for (const TreeLine& t : kept)
-    {
-        out.precision(2);
-        out << t.x << " " << t.y << " " << t.z << " ";
-        out.precision(3);
-        out << t.scale << " " << t.yaw << "\n";
-    }
-    out.close();
-
-    std::printf("Arvores atualizadas em \"%s\": %zu mantidas, %d removidas sobre asfalto.\n",
-                trees_path.c_str(), kept.size(), removed);
-    return 0;
-}
-
 int RunApply(const std::string& prefix)
 {
     std::string terrain_dir = prefix + "data/terrain/";
@@ -1254,7 +1160,6 @@ int RunApply(const std::string& prefix)
 
     std::vector<uint8_t> splat0(N * 4, 0);
     std::vector<uint8_t> splat1(N * 4, 0);
-    std::vector<float>   asphalt_mask(N, 0.0f);
 
     for (size_t i = 0; i < N; ++i)
     {
@@ -1285,8 +1190,6 @@ int RunApply(const std::string& prefix)
             continue;
 
         for (int m = 0; m < 8; ++m) w_mat[m] /= total;
-
-        asphalt_mask[i] = w_mat[MAT_ASPHALT_MAIN] + w_mat[MAT_ASPHALT_SEC];
 
         // Quantiza os 8 pesos garantindo soma exata == 255 entre splat0 + splat1
         int q[8];
@@ -1321,8 +1224,6 @@ int RunApply(const std::string& prefix)
         return 1;
 
     std::printf("Splatmaps atualizados: \"%s\" e \"%s\".\n", splat0_path.c_str(), splat1_path.c_str());
-
-    FilterTreesByAsphalt(terrain_dir, W, H, asphalt_mask);
     return 0;
 }
 
@@ -1338,7 +1239,7 @@ int main(int argc, char* argv[])
     if (mode == "--apply")
         return RunApply(prefix);
 
-    std::printf("Uso:\n  %s --init   (gera data/terrain/terreno_editavel.psd)\n  %s --apply  (aplica PSD editado nos splatmaps e arvores)\n",
+    std::printf("Uso:\n  %s --init   (gera data/terrain/terreno_editavel.psd)\n  %s --apply  (aplica PSD editado nos splatmaps)\n",
                 argv[0], argv[0]);
     return 1;
 }

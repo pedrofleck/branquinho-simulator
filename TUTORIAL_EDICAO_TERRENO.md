@@ -63,15 +63,13 @@ A pilha foi desenhada para que **a camada de cima sempre vença a de baixo autom
 1. No Affinity Photo, salve/exporte sobrescrevendo o próprio PSD:
    - **`File` -> `Export...` -> `PSD`** (pode usar o preset padrão *Preserve Editability* ou *Final Cut*), salvando em **`data/terrain/terreno_editavel.psd`**.
    - *(Obs.: `File -> Save` no Affinity Photo salva como `.afphoto`; se você quiser guardar o projeto com histórico do Affinity, salve o `.afphoto` para você, mas lembre-se sempre de exportar por cima de `data/terrain/terreno_editavel.psd` para o jogo enxergar).*
-2. **Rode o simulador normalmente**!
-   - Ao abrir o jogo, `LoadTerrainTextures()` verifica automaticamente se `terreno_editavel.psd` está mais novo que `splatmap_0.png` e executa `tools/terrain_psd_tool.exe --apply` sozinho antes de carregar a cena.
-   - Isso atualiza:
-     - `data/terrain/splatmap_0.png` e `data/terrain/splatmap_1.png` (as texturas no chão do jogo);
-     - `data/terrain/trees.txt` (remove automaticamente qualquer árvore 3D a até ~4m do novo asfalto, e traz as árvores originais de `trees_base.txt` de volta caso você tenha apagado um asfalto errado).
-3. *(Opcional)* Se quiser aplicar manualmente pelo terminal sem abrir o jogo, rode na raiz do repositório:
-   ```powershell
-   .\tools\terrain_psd_tool.exe --apply
-   ```
+2. **Aplique o PSD manualmente antes de rodar o simulador**:
+   - Como `terreno_editavel.psd` e `*.exe` ficam no `.gitignore`, **o jogo não roda a ferramenta sozinho**. Após salvar/exportar o PSD, aplique as alterações nos splatmaps executando na raiz do repositório:
+     ```powershell
+     .\tools\terrain_psd_tool.exe --apply
+     ```
+   - Isso atualiza `data/terrain/splatmap_0.png` e `data/terrain/splatmap_1.png` (as texturas no chão do jogo) sem remover árvores de `data/terrain/trees.txt`.
+3. Em seguida, **rode o simulador normalmente** para ver as novas máscaras aplicadas.
 
 #### Se você for editar em outro computador:
 O Git ignora `*.exe` e `terreno_editavel.psd` (`.gitignore`), então os splatmaps atualizados, o `terrain_psd_tool.cpp` e este tutorial vão normalmente no `git push`/`git pull`, sem travar o GitHub. No computador novo, basta compilar a ferramenta uma vez e gerar o `.psd` em 1 segundo a partir dos splatmaps atuais:
