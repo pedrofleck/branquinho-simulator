@@ -429,6 +429,8 @@ void Bus::Draw(ObjModel& model)
             glUniform1i(g_object_id_uniform, HEADLIGHT_LENS);
         else if (shape_name == "Carroceria")
             glUniform1i(g_object_id_uniform, BUS_PAINT);
+        else if (shape_name == "Borrachas")
+            glUniform1i(g_object_id_uniform, BUS_RUBBER);
         else
             glUniform1i(g_object_id_uniform, BUS);
 

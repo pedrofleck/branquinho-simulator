@@ -22,6 +22,7 @@
 #define TREE_TRUNK      7
 #define TREE_CANOPY     8
 #define BUS_PAINT       9 // Material da carroceria
+#define BUS_RUBBER      10 // Material da borracha
 
 // Estrutura que representa um modelo geométrico carregado a partir de um arquivo .obj
 struct ObjModel

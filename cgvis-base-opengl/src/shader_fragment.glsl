@@ -76,6 +76,7 @@ uniform mat4 projection;  // Matriz Projection: coordenadas da câmera -> NDC
 #define TREE_TRUNK     7
 #define TREE_CANOPY    8
 #define BUS_PAINT      9
+#define BUS_RUBBER      10
 uniform int object_id;
 
 uniform vec4 bbox_min;  // Menor coordenada XYZ da caixa delimitadora do objeto
@@ -261,6 +262,13 @@ void main()
         Ks  = vec3(0.04, 0.04, 0.04); // refletividade de verniz (entra no Fresnel de Schlick)
         q   = 400.0;                  // brilho do sol pequeno e nítido
         is_clearcoat = true;
+    }
+    else if ( object_id == BUS_RUBBER )
+    {
+        Kd0 = vec3(0.01, 0.01, 0.01); // borracha preta
+        Ks  = vec3(0.04, 0.04, 0.04); // refletividade
+        q   = 8.0;                  // brilho do sol
+        // is_clearcoat = false;
     }
     else if ( object_id == PLANE )
     {
