@@ -12,15 +12,16 @@
 #include <tiny_obj_loader.h>
 
 // Identificadores de objetos passados ao Fragment Shader
-#define SPHERE         0
-#define BUNNY          1
-#define PLANE          2
-#define BUS            3
-#define LIGHTPOLE      4
-#define LIGHTBULB      5
-#define HEADLIGHT_LENS 6
-#define TREE_TRUNK     7
-#define TREE_CANOPY    8
+#define SPHERE          0
+#define BUNNY           1
+#define PLANE           2
+#define BUS             3
+#define LIGHTPOLE       4
+#define LIGHTBULB       5
+#define HEADLIGHT_LENS  6
+#define TREE_TRUNK      7
+#define TREE_CANOPY     8
+#define BUS_PAINT       9 // Material da carroceria
 
 // Estrutura que representa um modelo geométrico carregado a partir de um arquivo .obj
 struct ObjModel

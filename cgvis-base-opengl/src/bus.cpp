@@ -111,7 +111,7 @@ void Bus::OnKey(int key, int action){
         printf("Farois do onibus (L): %s\n", state_names[headlight_state]);
     }
 
-    // Tecla P controla o farol separado de Luz Alta (_tex_high_beam__emissive_):
+    // Tecla P controla o farol separado de Luz Alta (emissive_highbeam):
     //   - Toque curto: pisca a luz alta enquanto P está pressionada e apaga ao soltar.
     //   - Segurar P: trava a luz alta acesa continuamente até que P seja pressionada novamente.
     if (key == GLFW_KEY_P)
@@ -413,20 +413,22 @@ void Bus::Draw(ObjModel& model)
         
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(new_model_mat));
 
-        // 1. Luz menor do meio (_tex_electric__emissive_ em ±0.96, 1.12):
+        // 1. Luz menor do meio (emissive_electric em ±0.96, 1.12):
         //    acende ao apertar L 1 vez (estágio 1) e continua acesa no estágio 2
-        bool middle_small_lit = (headlight_state >= 1) && (shape_name == "_tex_electric__emissive_");
+        bool middle_small_lit = (headlight_state >= 1) && (shape_name == "emissive_electric");
 
-        // 2. Farol principal maior (_tex_low_beam__emissive_ em ±1.08, 1.07):
+        // 2. Farol principal maior (emissive_lowbeam em ±1.08, 1.07):
         //    acende ao apertar L 2 vezes (estágio 2)
-        bool main_large_lit = (headlight_state == 2) && (shape_name == "_tex_low_beam__emissive_");
+        bool main_large_lit = (headlight_state == 2) && (shape_name == "emissive_lowbeam");
 
-        // 3. Farol separado de Luz Alta (_tex_high_beam__emissive_ em ±0.90, 1.01):
+        // 3. Farol separado de Luz Alta (emissive_highbeam em ±0.90, 1.01):
         //    pisca ao apertar P ou fica aceso continuamente ao segurar P
-        bool high_beam_lit = IsHighBeamActive() && (shape_name == "_tex_high_beam__emissive_");
+        bool high_beam_lit = IsHighBeamActive() && (shape_name == "emissive_highbeam");
 
         if (middle_small_lit || main_large_lit || high_beam_lit)
             glUniform1i(g_object_id_uniform, HEADLIGHT_LENS);
+        else if (shape_name == "Carroceria")
+            glUniform1i(g_object_id_uniform, BUS_PAINT);
         else
             glUniform1i(g_object_id_uniform, BUS);
 

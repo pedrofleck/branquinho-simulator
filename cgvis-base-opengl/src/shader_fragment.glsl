@@ -75,6 +75,7 @@ uniform mat4 projection;  // Matriz Projection: coordenadas da câmera -> NDC
 #define HEADLIGHT_LENS 6
 #define TREE_TRUNK     7
 #define TREE_CANOPY    8
+#define BUS_PAINT      9
 uniform int object_id;
 
 uniform vec4 bbox_min;  // Menor coordenada XYZ da caixa delimitadora do objeto
@@ -217,6 +218,7 @@ void main()
     vec3  Ks       = vec3(0.2, 0.2, 0.2);
     float q        = 32.0;
     vec3  emissive = vec3(0.0, 0.0, 0.0);
+    bool is_clearcoat = false;
 
     if ( object_id == SPHERE )
     {
@@ -252,6 +254,13 @@ void main()
         Kd0 = vec3(0.95, 0.95, 0.95);
         Ks  = vec3(0.50, 0.50, 0.50);
         q   = 64.0;
+    }
+    else if ( object_id == BUS_PAINT )
+    {
+        Kd0 = vec3(0.85, 0.85, 0.85); // tinta branca (não use 1.0, estoura sob o sol)
+        Ks  = vec3(0.04, 0.04, 0.04); // refletividade de verniz (entra no Fresnel de Schlick)
+        q   = 400.0;                  // brilho do sol pequeno e nítido
+        is_clearcoat = true;
     }
     else if ( object_id == PLANE )
     {
@@ -413,6 +422,19 @@ void main()
     }
 
     lit_color += emissive;
+
+    if (is_clearcoat)
+    {
+        vec4  r      = reflect(-v, n);
+        vec3  hor    = pow(fog_color, vec3(2.2));      // fog_color está em sRGB; converte para linear
+        vec3  zenith = hor * vec3(0.55, 0.75, 1.30);         // azul do céu (ajuste ao gosto)
+        vec3  ground = ambient_color * 0.15;         // chão escuro refletido
+        vec3  env    = (r.y >= 0.0) ? mix(hor, zenith, r.y)
+                                    : mix(hor, ground, clamp(-r.y * 4.0, 0.0, 1.0));
+        float NdotV  = max(0.0, dot(n, v));
+        vec3  F      = Ks + (vec3(1.0) - Ks) * pow(1.0 - NdotV, 5.0);
+        lit_color   += F * env * 0.8;
+    }
 
     // ========================================================================
     // 4. Correção Gamma (Linear -> sRGB)

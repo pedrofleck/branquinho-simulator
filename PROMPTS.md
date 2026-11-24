@@ -80,3 +80,9 @@ PROMPT: Atualmente a câmera orbita o eixo traseiro do ônibus, que é a sua ori
 
 PROMPT: A suspensão está apresentando um comportamento meio estranho quando o ônibus está subindo ou descendo um terreno inclinado.
 Quando está subindo, as molas são comprimidas e o ônibus fica mais baixo que o normal. Já quando está descendo, o ônibus fica bem alto, com a suspensão esticada. Investigue e conserte este bug
+
+---
+
+# Material da carroceria do ônibus
+
+PROMPT: Aplique à carroceria do ônibus um material que tenha aparência de um veículo pintado de branco.
